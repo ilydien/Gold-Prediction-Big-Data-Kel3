@@ -27,8 +27,6 @@ yfinance → Producer → Kafka → Spark → PostgreSQL → API (FastAPI)
 ```bash
 docker compose up --watch
 ```
-```bash
-```
 
 ## Services & Ports
 
