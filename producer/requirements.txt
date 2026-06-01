@@ -1,0 +1,4 @@
+yfinance
+kafka-python
+pandas
+numpy

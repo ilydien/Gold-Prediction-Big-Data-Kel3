@@ -1,0 +1,7 @@
+fastapi
+uvicorn
+pandas
+numpy
+joblib
+psycopg2-binary
+sqlalchemy
