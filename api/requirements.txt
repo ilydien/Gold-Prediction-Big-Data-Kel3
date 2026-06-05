@@ -5,3 +5,5 @@ numpy
 joblib
 psycopg2-binary
 sqlalchemy
+boto3
+pydantic
