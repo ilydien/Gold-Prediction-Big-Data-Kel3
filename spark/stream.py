@@ -6,15 +6,15 @@ import boto3
 import pandas as pd
 import requests
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import col, from_json, lag, stddev
+from pyspark.sql.functions import col, from_json
 from pyspark.sql.types import (
     DoubleType,
-    StringType,
     StructField,
     StructType,
     TimestampType,
 )
-from pyspark.sql.window import Window
+
+from shared.features import FEATURE_COLUMNS, compute_features
 
 KAFKA_BROKER = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")
 TOPIC = os.getenv("KAFKA_TOPIC", "gold_stream")
@@ -55,6 +55,8 @@ s3_client = boto3.client(
     config=boto3.session.Config(signature_version="s3v4"),
 )
 
+_history_buffer = pd.DataFrame()
+
 
 def write_raw_to_garage(df, epoch_id):
     if df.count() == 0:
@@ -71,37 +73,31 @@ def write_processed_to_garage(df, epoch_id):
     if df.count() == 0:
         return
     pdf = df.toPandas()
-    window_spec = Window.orderBy("timestamp")
-    pdf_spark = spark.createDataFrame(pdf)
-    features = (
-        pdf_spark.withColumn("lag_1", lag("gold_price", 1).over(window_spec))
-        .withColumn("lag_5", lag("gold_price", 5).over(window_spec))
-        .withColumn("lag_10", lag("gold_price", 10).over(window_spec))
-    )
-
-    pdf_result = features.toPandas().dropna()
-    if len(pdf_result) == 0:
-        return
-    pdf_result["processing_time"] = datetime.now(timezone.utc).isoformat()
-    buffer = pdf_result.to_parquet(index=False)
+    pdf["processing_time"] = datetime.now(timezone.utc).isoformat()
+    buffer = pdf.to_parquet(index=False)
     filename = f"batch={epoch_id}/data.parquet"
     s3_client.put_object(Bucket="processed-data", Key=filename, Body=buffer)
-    print(f"Wrote {len(pdf_result)} processed rows to processed-data/{filename}")
+    print(f"Wrote {len(pdf)} processed rows to processed-data/{filename}")
 
 
 def predict_via_fastapi(df, epoch_id):
+    global _history_buffer
     if df.count() == 0:
         return
-    latest = df.orderBy(col("timestamp").desc()).first()
-    if latest is None:
+
+    pdf = df.toPandas()
+    _history_buffer = pd.concat([_history_buffer, pdf], ignore_index=True)
+    _history_buffer = _history_buffer.tail(50)
+
+    features = compute_features(_history_buffer)
+    last_row = features.dropna(subset=FEATURE_COLUMNS)
+    if last_row.empty:
         return
+
+    latest = last_row.iloc[-1]
     payload = {
-        "timestamp": latest["timestamp"].isoformat(),
-        "gold_price": latest["gold_price"],
-        "oil_price": latest["oil_price"],
-        "dxy": latest["dxy"],
-        "eurusd": latest["eurusd"],
-        "jpy": latest["jpy"],
+        "timestamp": str(latest.get("timestamp", "")),
+        "features": {col: latest[col] for col in FEATURE_COLUMNS},
     }
     try:
         resp = requests.post(FASTAPI_URL, json=payload, timeout=5)
@@ -150,6 +146,6 @@ predict_query = (
     .trigger(processingTime=f"{PROCESSING_INTERVAL} seconds")
     .start()
 )
-print("Sending predictions to FastAPI...")
+print("Sending features to FastAPI...")
 
 spark.streams.awaitAnyTermination()
