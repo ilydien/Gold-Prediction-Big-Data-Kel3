@@ -1,0 +1,244 @@
+# Local development — all services on one machine
+# No Tailscale needed. Containers communicate via Docker internal DNS.
+#
+# Usage: docker compose -f docker-compose.local.yaml up -d
+
+networks:
+  gold-network:
+    driver: bridge
+
+services:
+
+  # ===== Person 1: Data Ingestion =====
+  kafka:
+    image: apache/kafka:latest
+    container_name: kafka
+    hostname: kafka
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      CLUSTER_ID: gold-cluster-01
+    restart: unless-stopped
+    networks:
+      - gold-network
+
+  yahoo-fetcher:
+    build:
+      context: .
+      dockerfile: producer/Dockerfile
+    container_name: yahoo-fetcher
+    depends_on:
+      - kafka
+    environment:
+      KAFKA_BROKER: kafka:9092
+      KAFKA_TOPIC: gold_stream
+      MIN_INTERVAL: "1"
+      MAX_INTERVAL: "5"
+    restart: unless-stopped
+    networks:
+      - gold-network
+
+  # ===== Person 2: Stream Processing =====
+  spark-master:
+    image: bitnamilegacy/spark:3.5
+    container_name: spark-master
+    hostname: spark-master
+    environment:
+      - SPARK_MODE=master
+      - SPARK_RPC_AUTHENTICATION_ENABLED=no
+      - SPARK_RPC_ENCRYPTION_ENABLED=no
+      - SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED=no
+      - SPARK_SSL_ENABLED=no
+    ports:
+      - "7077:7077"
+      - "8080:8080"
+    restart: unless-stopped
+    networks:
+      - gold-network
+
+  spark-worker:
+    image: bitnamilegacy/spark:3.5
+    container_name: spark-worker
+    depends_on:
+      - spark-master
+    environment:
+      - SPARK_MODE=worker
+      - SPARK_MASTER_URL=spark://spark-master:7077
+      - SPARK_WORKER_MEMORY=2G
+      - SPARK_WORKER_CORES=2
+    restart: unless-stopped
+    networks:
+      - gold-network
+
+  processing-job:
+    build:
+      context: .
+      dockerfile: spark/Dockerfile
+    container_name: processing-job
+    depends_on:
+      - spark-master
+      - spark-worker
+      - kafka
+      - garage
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      KAFKA_TOPIC: gold_stream
+      GARAGE_ENDPOINT: http://garage:3900
+      GARAGE_ACCESS_KEY: ${GARAGE_ACCESS_KEY}
+      GARAGE_SECRET_KEY: ${GARAGE_SECRET_KEY}
+      FASTAPI_URL: http://fastapi:8000/predict
+      PROCESSING_INTERVAL: "10"
+    restart: unless-stopped
+    networks:
+      - gold-network
+
+  # ===== Person 3: ML & MLOps =====
+  garage:
+    image: dxflrs/garage:v1.1.0
+    container_name: garage
+    hostname: garage
+    entrypoint: /garage
+    command: server
+    ports:
+      - "3900:3900"
+      - "3901:3901"
+      - "3902:3902"
+    volumes:
+      - garage_data:/mnt/data
+      - ./garage.toml:/etc/garage.toml
+    restart: unless-stopped
+    networks:
+      - gold-network
+
+  garage-init:
+    build:
+      context: .
+      dockerfile: storage/garage/Dockerfile
+    container_name: garage-init
+    depends_on:
+      - garage
+    environment:
+      GARAGE_ENDPOINT: http://garage:3900
+    restart: "no"
+    networks:
+      - gold-network
+
+  prefect:
+    image: prefecthq/prefect:3-latest
+    container_name: prefect
+    hostname: prefect
+    command: prefect server start
+    ports:
+      - "4200:4200"
+    restart: unless-stopped
+    networks:
+      - gold-network
+
+  ml-training:
+    build:
+      context: .
+      dockerfile: storage/trainer/Dockerfile
+    container_name: ml-training
+    depends_on:
+      - garage
+      - postgres
+    environment:
+      GARAGE_ENDPOINT: http://garage:3900
+      GARAGE_ACCESS_KEY: ${GARAGE_ACCESS_KEY}
+      GARAGE_SECRET_KEY: ${GARAGE_SECRET_KEY}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: gold_prediction
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    restart: "no"
+    networks:
+      - gold-network
+
+  # ===== Person 4: Serving & Monitoring =====
+  postgres:
+    image: postgres:16
+    container_name: postgres
+    hostname: postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: gold_prediction
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - gold-network
+
+  fastapi:
+    build:
+      context: .
+      dockerfile: api/Dockerfile
+    container_name: fastapi
+    hostname: fastapi
+    depends_on:
+      - postgres
+    ports:
+      - "8000:8000"
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: gold_prediction
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      GARAGE_ENDPOINT: http://garage:3900
+      GARAGE_ACCESS_KEY: ${GARAGE_ACCESS_KEY}
+      GARAGE_SECRET_KEY: ${GARAGE_SECRET_KEY}
+    restart: unless-stopped
+    networks:
+      - gold-network
+
+  grafana:
+    image: grafana/grafana
+    container_name: grafana
+    depends_on:
+      - postgres
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning
+    restart: unless-stopped
+    networks:
+      - gold-network
+
+  telegram-bot:
+    build:
+      context: .
+      dockerfile: telegram/Dockerfile
+    container_name: telegram-bot
+    depends_on:
+      - postgres
+    environment:
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: gold_prediction
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      CHECK_INTERVAL: "30"
+      PRICE_THRESHOLD: "10.0"
+    restart: unless-stopped
+    networks:
+      - gold-network
+
+volumes:
+  garage_data:
+  postgres_data:

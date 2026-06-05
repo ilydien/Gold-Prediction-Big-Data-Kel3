@@ -4,7 +4,7 @@ USER root
 
 RUN pip install --no-cache-dir boto3 pandas numpy requests
 
-COPY stream.py /app/stream.py
+COPY spark/stream.py /app/stream.py
 COPY shared/ /app/shared/
 
 WORKDIR /app
