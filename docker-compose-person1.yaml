@@ -1,0 +1,43 @@
+services:
+
+  kafka:
+    image: apache/kafka:latest
+    container_name: person1-kafka
+    hostname: kafka
+    ports:
+      - "9092:9092"
+      - "9094:9094"
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,EXTERNAL://0.0.0.0:9094
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,EXTERNAL://${KAFKA_ADVERTISED_LISTENER:-localhost}:9094
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_LISTENERS_CONTROLLER: PLAINTEXT://0.0.0.0:9093
+      CLUSTER_ID: "gold-cluster-01"
+    restart: unless-stopped
+    networks:
+      - person1-net
+
+  yahoo-fetcher:
+    build:
+      context: .
+      dockerfile: producer/Dockerfile
+    container_name: person1-producer
+    depends_on:
+      - kafka
+    environment:
+      KAFKA_BROKER: kafka:9092
+      KAFKA_TOPIC: gold_stream
+      MIN_INTERVAL: "1"
+      MAX_INTERVAL: "5"
+    restart: unless-stopped
+    networks:
+      - person1-net
+
+networks:
+  person1-net:
+    driver: bridge
