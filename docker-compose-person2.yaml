@@ -39,10 +39,11 @@ services:
     depends_on:
       - spark-master
       - spark-worker
+      - garage
     environment:
       KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS}
       KAFKA_TOPIC: gold_stream
-      GARAGE_ENDPOINT: ${GARAGE_ENDPOINT}
+      GARAGE_ENDPOINT: http://garage:3900
       GARAGE_ACCESS_KEY: ${GARAGE_ACCESS_KEY}
       GARAGE_SECRET_KEY: ${GARAGE_SECRET_KEY}
       FASTAPI_URL: ${FASTAPI_URL}
@@ -50,6 +51,39 @@ services:
     restart: unless-stopped
     networks:
       - person2-net
+
+  garage:
+    image: dxflrs/garage:v1.1.0
+    container_name: person2-garage
+    hostname: garage
+    entrypoint: /garage
+    command: server
+    ports:
+      - "3900:3900"
+      - "3901:3901"
+      - "3902:3902"
+    volumes:
+      - garage_data:/mnt/data
+      - ./garage.toml:/etc/garage.toml
+    restart: unless-stopped
+    networks:
+      - person2-net
+
+  garage-init:
+    build:
+      context: .
+      dockerfile: storage/garage/Dockerfile
+    container_name: person2-garage-init
+    depends_on:
+      - garage
+    environment:
+      GARAGE_ENDPOINT: http://garage:3900
+    restart: "no"
+    networks:
+      - person2-net
+
+volumes:
+  garage_data:
 
 networks:
   person2-net:

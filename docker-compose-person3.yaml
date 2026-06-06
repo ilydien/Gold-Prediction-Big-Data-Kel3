@@ -1,35 +1,5 @@
 services:
 
-  garage:
-    image: dxflrs/garage:v1.1.0
-    container_name: person3-garage
-    hostname: garage
-    entrypoint: /garage
-    command: server
-    ports:
-      - "3900:3900"
-      - "3901:3901"
-      - "3902:3902"
-    volumes:
-      - garage_data:/mnt/data
-      - ./garage.toml:/etc/garage.toml
-    restart: unless-stopped
-    networks:
-      - person3-net
-
-  garage-init:
-    build:
-      context: .
-      dockerfile: storage/garage/Dockerfile
-    container_name: person3-garage-init
-    depends_on:
-      - garage
-    environment:
-      GARAGE_ENDPOINT: http://garage:3900
-    restart: "no"
-    networks:
-      - person3-net
-
   prefect:
     image: prefecthq/prefect:3-latest
     container_name: person3-prefect
@@ -46,10 +16,8 @@ services:
       context: .
       dockerfile: storage/trainer/Dockerfile
     container_name: person3-ml-training
-    depends_on:
-      - garage
     environment:
-      GARAGE_ENDPOINT: http://garage:3900
+      GARAGE_ENDPOINT: http://${GARAGE_HOST:-100.x.x.2}:3900
       GARAGE_ACCESS_KEY: ${GARAGE_ACCESS_KEY}
       GARAGE_SECRET_KEY: ${GARAGE_SECRET_KEY}
       POSTGRES_HOST: ${POSTGRES_HOST}
@@ -60,9 +28,6 @@ services:
     restart: "no"
     networks:
       - person3-net
-
-volumes:
-  garage_data:
 
 networks:
   person3-net:
