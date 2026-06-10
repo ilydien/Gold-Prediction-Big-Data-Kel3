@@ -8,3 +8,8 @@ wheels/
 
 # Virtual environments
 .venv
+
+# Environment files (actual secrets — do NOT commit)
+.env
+!.env.person*
+!.env.example

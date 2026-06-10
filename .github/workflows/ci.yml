@@ -1,0 +1,31 @@
+name: CI - Build & Verify
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create .env from template
+        run: cp .env.person3 .env
+
+      - name: Build Person 1 - Data Ingestion
+        run: docker compose -f docker-compose-person1.yaml build
+
+      - name: Build Person 2 - Stream Processing
+        run: docker compose -f docker-compose-person2.yaml build
+
+      - name: Build Person 3 - ML & MLOps
+        run: docker compose -f docker-compose-person3.yaml build
+
+      - name: Build Person 4 - Serving & Monitoring
+        run: docker compose -f docker-compose-person4.yaml build
+
+      - name: Verify all images built
+        run: docker images --format "{{.Repository}}:{{.Tag}}" | sort

@@ -1,35 +1,20 @@
-CREATE TABLE IF NOT EXISTS gold_stream (
-    id SERIAL PRIMARY KEY,
-    timestamp TIMESTAMP,
-    gold_price DOUBLE PRECISION,
-    oil_price DOUBLE PRECISION,
-    dxy DOUBLE PRECISION
-);
-
-CREATE TABLE IF NOT EXISTS gold_features (
-    id SERIAL PRIMARY KEY,
-    timestamp TIMESTAMP,
-    lag1 DOUBLE PRECISION,
-    lag5 DOUBLE PRECISION,
-    return DOUBLE PRECISION,
-    volatility DOUBLE PRECISION,
-    dxy DOUBLE PRECISION,
-    oil_price DOUBLE PRECISION
-);
-
 CREATE TABLE IF NOT EXISTS predictions (
     id SERIAL PRIMARY KEY,
-    timestamp TIMESTAMP,
+    timestamp TIMESTAMP NOT NULL,
+    predicted_price DOUBLE PRECISION NOT NULL,
     actual_price DOUBLE PRECISION,
-    predicted_price DOUBLE PRECISION,
     error DOUBLE PRECISION,
-    model_version VARCHAR(50)
+    model_version VARCHAR(100)
 );
 
 CREATE TABLE IF NOT EXISTS model_metrics (
     id SERIAL PRIMARY KEY,
-    timestamp TIMESTAMP,
+    timestamp TIMESTAMP NOT NULL,
+    model_name VARCHAR(100),
     mae DOUBLE PRECISION,
     rmse DOUBLE PRECISION,
     r2 DOUBLE PRECISION
 );
+
+CREATE INDEX IF NOT EXISTS idx_predictions_timestamp ON predictions(timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_model_metrics_timestamp ON model_metrics(timestamp DESC);

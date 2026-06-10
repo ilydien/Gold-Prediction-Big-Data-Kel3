@@ -1,0 +1,34 @@
+services:
+
+  prefect:
+    image: prefecthq/prefect:3-latest
+    container_name: person3-prefect
+    hostname: prefect
+    command: prefect server start
+    ports:
+      - "4200:4200"
+    restart: unless-stopped
+    networks:
+      - person3-net
+
+  ml-training:
+    build:
+      context: .
+      dockerfile: storage/trainer/Dockerfile
+    container_name: person3-ml-training
+    environment:
+      GARAGE_ENDPOINT: http://${GARAGE_HOST:-100.x.x.2}:3900
+      GARAGE_ACCESS_KEY: ${GARAGE_ACCESS_KEY}
+      GARAGE_SECRET_KEY: ${GARAGE_SECRET_KEY}
+      POSTGRES_HOST: ${POSTGRES_HOST}
+      POSTGRES_PORT: ${POSTGRES_PORT}
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    restart: "no"
+    networks:
+      - person3-net
+
+networks:
+  person3-net:
+    driver: bridge

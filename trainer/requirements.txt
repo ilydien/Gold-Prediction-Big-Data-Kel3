@@ -1,7 +1,0 @@
-pandas
-numpy
-scikit-learn
-joblib
-psycopg2-binary
-boto3
-prefect
