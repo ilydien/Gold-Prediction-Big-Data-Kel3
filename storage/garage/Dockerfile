@@ -1,4 +1,4 @@
-FROM dxflrs/garage:v1.1.0 AS garage-bin
+FROM dxflrs/garage:v2.3.0 AS garage-bin
 
 FROM python:3.12-slim
 

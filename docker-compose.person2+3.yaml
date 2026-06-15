@@ -69,7 +69,7 @@ services:
       - hybrid-net
 
   garage:
-    image: dxflrs/garage:v1.1.0
+    image: dxflrs/garage:v2.3.0
     container_name: person2-garage
     hostname: garage
     entrypoint: /garage

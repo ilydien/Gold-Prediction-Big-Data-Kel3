@@ -100,7 +100,7 @@ services:
 
   # ===== Person 2: Garage (shared storage) =====
   garage:
-    image: dxflrs/garage:v1.1.0
+    image: dxflrs/garage:v2.3.0
     container_name: garage
     hostname: garage
     entrypoint: /garage
