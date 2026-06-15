@@ -1,0 +1,138 @@
+# Hybrid: Person 2 (Stream Processing) + Person 3 (ML & MLOps)
+# Jalankan semua service Person 2 + Person 3 di 1 laptop.
+# Koneksi eksternal (Kafka, Postgres, FastAPI) via Tailscale.
+#
+# Usage:
+#   1. Init Garage untuk dapetin keys:
+#      docker compose -f docker-compose.person2+3.yaml up garage-init
+#      (catet ACCESS_KEY & SECRET_KEY dari log, isi ke .env)
+#
+#   2. Jalanin semua service:
+#      docker compose -f docker-compose.person2+3.yaml up -d
+#
+#   3. Cek log:
+#      docker compose -f docker-compose.person2+3.yaml logs --tail=20
+
+services:
+
+  # ===== Person 2: Stream Processing =====
+  spark-master:
+    image: bitnamilegacy/spark:3.5
+    container_name: person2-spark-master
+    hostname: spark-master
+    environment:
+      - SPARK_MODE=master
+      - SPARK_RPC_AUTHENTICATION_ENABLED=no
+      - SPARK_RPC_ENCRYPTION_ENABLED=no
+      - SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED=no
+      - SPARK_SSL_ENABLED=no
+    ports:
+      - "7077:7077"
+      - "8080:8080"
+    restart: unless-stopped
+    networks:
+      - hybrid-net
+
+  spark-worker:
+    image: bitnamilegacy/spark:3.5
+    container_name: person2-spark-worker
+    depends_on:
+      - spark-master
+    environment:
+      - SPARK_MODE=worker
+      - SPARK_MASTER_URL=spark://spark-master:7077
+      - SPARK_WORKER_MEMORY=2G
+      - SPARK_WORKER_CORES=2
+    restart: unless-stopped
+    networks:
+      - hybrid-net
+
+  processing-job:
+    build:
+      context: .
+      dockerfile: spark/Dockerfile
+    container_name: person2-processing-job
+    depends_on:
+      - spark-master
+      - spark-worker
+      - garage
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS}
+      KAFKA_TOPIC: gold_stream
+      GARAGE_ENDPOINT: http://garage:3900
+      GARAGE_ACCESS_KEY: ${GARAGE_ACCESS_KEY}
+      GARAGE_SECRET_KEY: ${GARAGE_SECRET_KEY}
+      FASTAPI_URL: ${FASTAPI_URL}
+      PROCESSING_INTERVAL: "10"
+    restart: unless-stopped
+    networks:
+      - hybrid-net
+
+  garage:
+    image: dxflrs/garage:v1.1.0
+    container_name: person2-garage
+    hostname: garage
+    entrypoint: /garage
+    command: server
+    ports:
+      - "3900:3900"
+      - "3901:3901"
+      - "3902:3902"
+    volumes:
+      - garage_data:/mnt/data
+      - ./garage.toml:/etc/garage.toml
+    restart: unless-stopped
+    networks:
+      - hybrid-net
+
+  garage-init:
+    build:
+      context: .
+      dockerfile: storage/garage/Dockerfile
+    container_name: person2-garage-init
+    depends_on:
+      - garage
+    environment:
+      GARAGE_ENDPOINT: http://garage:3900
+    restart: "no"
+    networks:
+      - hybrid-net
+
+  # ===== Person 3: ML & MLOps =====
+  prefect:
+    image: prefecthq/prefect:3-latest
+    container_name: person3-prefect
+    hostname: prefect
+    command: prefect server start
+    ports:
+      - "4200:4200"
+    restart: unless-stopped
+    networks:
+      - hybrid-net
+
+  ml-training:
+    build:
+      context: .
+      dockerfile: storage/trainer/Dockerfile
+    container_name: person3-ml-training
+    depends_on:
+      - garage
+    environment:
+      GARAGE_ENDPOINT: http://garage:3900
+      GARAGE_ACCESS_KEY: ${GARAGE_ACCESS_KEY}
+      GARAGE_SECRET_KEY: ${GARAGE_SECRET_KEY}
+      POSTGRES_HOST: ${POSTGRES_HOST}
+      POSTGRES_PORT: ${POSTGRES_PORT:-5432}
+      POSTGRES_DB: ${POSTGRES_DB:-gold_prediction}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    restart: "no"
+    networks:
+      - hybrid-net
+
+volumes:
+  garage_data:
+
+networks:
+  hybrid-net:
+    driver: bridge
