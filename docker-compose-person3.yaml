@@ -17,7 +17,7 @@ services:
       dockerfile: storage/trainer/Dockerfile
     container_name: person3-ml-training
     environment:
-      GARAGE_ENDPOINT: http://${GARAGE_HOST:-100.x.x.2}:3900
+      GARAGE_ENDPOINT: http://${GARAGE_HOST:-100.69.198.116}:3900
       GARAGE_ACCESS_KEY: ${GARAGE_ACCESS_KEY}
       GARAGE_SECRET_KEY: ${GARAGE_SECRET_KEY}
       POSTGRES_HOST: ${POSTGRES_HOST}
