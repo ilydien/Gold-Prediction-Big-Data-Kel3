@@ -8,7 +8,7 @@ Big Data Streaming project — monitoring dan prediksi harga emas dunia secara r
 |--------|------|------|---------|
 | 1 | Yoeke | Data Ingestion | kafka, yahoo-fetcher |
 | 2 | Dio | Stream Processing | spark-master, spark-worker, processing-job |
-| 3 | Fatih | ML & MLOps | garage, prefect, ml-training |
+| 3 | Fatih | ML & MLOps | prefect, ml-training |
 | 4 | Angel | Serving & Monitoring | fastapi, postgres, grafana, telegram-bot |
 
 ## Architecture
@@ -22,17 +22,17 @@ graph TD
 
     subgraph "Person 2 - Dio"
         KF -->|consume| SS[Spark Structured Streaming]
-        SS -->|parquet| GB1[Garage<br/>raw-data]
-        SS -->|parquet| GB2[Garage<br/>processed-data]
+        SS -->|parquet| GB1[Garage (local)<br/>raw-data]
+        SS -->|parquet| GB2[Garage (local)<br/>processed-data]
         SS -->|HTTP POST| FA[FastAPI]
     end
 
     subgraph "Person 3 - Fatih"
-        GB2 --> PF[Prefect Flow]
-        PF -->|shared/features.py| GB3[Garage<br/>features]
+        GB2 -.->|remote read| PF[Prefect Flow]
+        PF -->|shared/features.py| GB3[Garage (remote)<br/>features]
         GB3 --> TR[ML Training<br/>LR + KNN + RF]
-        TR -->|MAE/RMSE/R²| GB4[Garage<br/>models]
-        TR --> PG[(PostgreSQL<br/>metrics)]
+        TR -->|MAE/RMSE/R²| GB4[Garage (remote)<br/>models]
+        TR -.->|remote write| PG[(PostgreSQL<br/>metrics)]
     end
 
     subgraph "Person 4 - Angel"
@@ -49,8 +49,8 @@ graph TD
 2. **Spark Structured Streaming** (Dio) consume dari Kafka, simpan raw + processed data ke Garage.
 3. **Spark** juga POST feature vector ke FastAPI untuk prediksi real-time.
 4. **Prefect** (Fatih) menjalankan feature engineering batch dari processed-data ke features bucket.
-5. **ML Training** (Fatih) membaca features, train 3 model (LR, KNN, RF), pilih terbaik, simpan ke Garage.
-6. **FastAPI** (Angel) load model dari Garage saat startup, simpan di RAM.
+5. **ML Training** (Fatih) membaca features dari Garage (via Tailscale ke Dio), train 3 model (LR, KNN, RF), pilih terbaik, simpan ke Garage.
+6. **FastAPI** (Angel) load model dari Garage saat startup (via Tailscale ke Dio), simpan di RAM.
 7. **FastAPI** menerima features → predict → simpan ke PostgreSQL.
 8. **Grafana** visualisasi dari PostgreSQL.
 9. **Telegram Bot** kirim alert jika harga berubah > threshold.
@@ -124,8 +124,8 @@ Detail: lihat `TAILSCALE-SETUP.md`
 | File | Untuk | Services |
 |------|-------|----------|
 | `docker-compose-person1.yaml` | Yoeke | kafka, yahoo-fetcher |
-| `docker-compose-person2.yaml` | Dio | spark-master, spark-worker, processing-job |
-| `docker-compose-person3.yaml` | Fatih | garage, garage-init, prefect, ml-training |
+| `docker-compose-person2.yaml` | Dio | spark-master, spark-worker, processing-job, garage, garage-init |
+| `docker-compose-person3.yaml` | Fatih | prefect, ml-training |
 | `docker-compose-person4.yaml` | Angel | postgres, fastapi, grafana, telegram-bot |
 | `docker-compose.local.yaml` | Local | all services on one machine |
 
@@ -134,8 +134,8 @@ Detail: lihat `TAILSCALE-SETUP.md`
 | Service | Port | Exposed By |
 |---------|------|------------|
 | Kafka | `9092` | Person 1 |
-| Garage S3 API | `3900` | Person 3 |
-| Garage Web | `3902` | Person 3 |
+| Garage S3 API | `3900` | Person 2 |
+| Garage Web | `3902` | Person 2 |
 | Prefect UI | `4200` | Person 3 |
 | FastAPI | `8000` | Person 4 |
 | PostgreSQL | `5432` | Person 4 |
@@ -147,10 +147,10 @@ Detail: lihat `TAILSCALE-SETUP.md`
 | From | To | Address |
 |------|----|---------|
 | Spark (Dio) | Kafka (Yoeke) | `100.x.x.1:9092` |
-| Spark (Dio) | Garage (Fatih) | `100.x.x.3:3900` |
+| Spark (Dio) | Garage (Dio) | `garage:3900` (local) |
 | Spark (Dio) | FastAPI (Angel) | `100.x.x.4:8000` |
 | Trainer (Fatih) | PostgreSQL (Angel) | `100.x.x.4:5432` |
-| FastAPI (Angel) | Garage (Fatih) | `100.x.x.3:3900` |
+| FastAPI (Angel) | Garage (Dio) | `100.x.x.2:3900` |
 
 ## Retraining Strategy
 

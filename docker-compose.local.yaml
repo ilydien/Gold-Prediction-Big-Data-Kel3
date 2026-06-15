@@ -98,7 +98,7 @@ services:
     networks:
       - gold-network
 
-  # ===== Person 3: ML & MLOps =====
+  # ===== Person 2: Garage (shared storage) =====
   garage:
     image: dxflrs/garage:v1.1.0
     container_name: garage
@@ -125,10 +125,14 @@ services:
       - garage
     environment:
       GARAGE_ENDPOINT: http://garage:3900
+      GARAGE_HOST: garage
+    volumes:
+      - ./garage.toml:/etc/garage.toml
     restart: "no"
     networks:
       - gold-network
 
+  # ===== Person 3: ML & MLOps =====
   prefect:
     image: prefecthq/prefect:3-latest
     container_name: prefect

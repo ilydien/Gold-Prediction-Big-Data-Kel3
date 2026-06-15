@@ -62,6 +62,7 @@ services:
       - "3900:3900"
       - "3901:3901"
       - "3902:3902"
+      - "3903:3903"
     volumes:
       - garage_data:/mnt/data
       - ./garage.toml:/etc/garage.toml
@@ -78,7 +79,25 @@ services:
       - garage
     environment:
       GARAGE_ENDPOINT: http://garage:3900
+      GARAGE_HOST: garage
+    volumes:
+      - ./garage.toml:/etc/garage.toml
+      - garage_data:/mnt/data
     restart: "no"
+    networks:
+      - person2-net
+
+  garage-webui:
+    image: khairul169/garage-webui:latest
+    container_name: person2-garage-webui
+    depends_on:
+      - garage
+    restart: unless-stopped
+    ports:
+      - "3909:3909"
+    environment:
+      API_BASE_URL: "http://garage:3903"
+      S3_ENDPOINT_URL: "http://garage:3900"
     networks:
       - person2-net
 
