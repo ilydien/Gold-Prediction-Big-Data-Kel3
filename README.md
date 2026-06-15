@@ -125,6 +125,7 @@ Detail: lihat `TAILSCALE-SETUP.md`
 |------|-------|----------|
 | `docker-compose-person1.yaml` | Yoeke | kafka, yahoo-fetcher |
 | `docker-compose-person2.yaml` | Dio | spark-master, spark-worker, processing-job, garage, garage-init |
+| `docker-compose.person1+2.yaml` | Dio (simulasi Yoeke) | kafka, yahoo-fetcher, spark-master, spark-worker, processing-job, garage, garage-init, garage-webui |
 | `docker-compose-person3.yaml` | Fatih | prefect, ml-training |
 | `docker-compose-person4.yaml` | Angel | postgres, fastapi, grafana, telegram-bot |
 | `docker-compose.local.yaml` | Local | all services on one machine |
@@ -147,6 +148,7 @@ Detail: lihat `TAILSCALE-SETUP.md`
 | From | To | Address |
 |------|----|---------|
 | Spark (Dio) | Kafka (Yoeke) | `100.x.x.1:9092` |
+| Spark (Dio) | Kafka (1+2 mode) | `kafka:9092` (internal) |
 | Spark (Dio) | Garage (Dio) | `garage:3900` (local) |
 | Spark (Dio) | FastAPI (Angel) | `100.x.x.4:8000` |
 | Trainer (Fatih) | PostgreSQL (Angel) | `100.x.x.4:5432` |

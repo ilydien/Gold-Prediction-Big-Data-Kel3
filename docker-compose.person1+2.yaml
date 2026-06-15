@@ -1,8 +1,47 @@
 services:
 
+  # ===== Person 1: Data Ingestion (simulated on Dio's machine) =====
+  kafka:
+    image: apache/kafka:latest
+    container_name: kafka
+    hostname: kafka
+    ports:
+      - "9092:9092"
+      - "9094:9094"
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: CONTROLLER://0.0.0.0:9093,PLAINTEXT://0.0.0.0:9092,EXTERNAL://0.0.0.0:9094
+      KAFKA_ADVERTISED_LISTENERS: CONTROLLER://kafka:9093,PLAINTEXT://kafka:9092,EXTERNAL://localhost:9094
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      CLUSTER_ID: "gold-cluster-01"
+    restart: unless-stopped
+    networks:
+      - gold-net
+
+  yahoo-fetcher:
+    build:
+      context: .
+      dockerfile: producer/Dockerfile
+    container_name: yahoo-fetcher
+    depends_on:
+      - kafka
+    environment:
+      KAFKA_BROKER: kafka:9092
+      KAFKA_TOPIC: gold_stream
+      MIN_INTERVAL: "1"
+      MAX_INTERVAL: "5"
+    restart: unless-stopped
+    networks:
+      - gold-net
+
+  # ===== Person 2: Stream Processing + Garage =====
   spark-master:
     image: bitnamilegacy/spark:3.5
-    container_name: person2-spark-master
+    container_name: spark-master
     hostname: spark-master
     environment:
       - SPARK_MODE=master
@@ -15,11 +54,11 @@ services:
       - "8080:8080"
     restart: unless-stopped
     networks:
-      - person2-net
+      - gold-net
 
   spark-worker:
     image: bitnamilegacy/spark:3.5
-    container_name: person2-spark-worker
+    container_name: spark-worker
     depends_on:
       - spark-master
     environment:
@@ -29,19 +68,20 @@ services:
       - SPARK_WORKER_CORES=2
     restart: unless-stopped
     networks:
-      - person2-net
+      - gold-net
 
   processing-job:
     build:
       context: .
       dockerfile: spark/Dockerfile
-    container_name: person2-processing-job
+    container_name: processing-job
     depends_on:
       - spark-master
       - spark-worker
       - garage
+      - kafka
     environment:
-      KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS}
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       KAFKA_TOPIC: gold_stream
       GARAGE_ENDPOINT: http://garage:3900
       GARAGE_ACCESS_KEY: ${GARAGE_ACCESS_KEY}
@@ -50,11 +90,11 @@ services:
       PROCESSING_INTERVAL: "10"
     restart: unless-stopped
     networks:
-      - person2-net
+      - gold-net
 
   garage:
     image: dxflrs/garage:v2.3.0
-    container_name: person2-garage
+    container_name: garage
     hostname: garage
     entrypoint: /garage
     command: server
@@ -68,13 +108,13 @@ services:
       - ./garage.toml:/etc/garage.toml
     restart: unless-stopped
     networks:
-      - person2-net
+      - gold-net
 
   garage-init:
     build:
       context: .
       dockerfile: storage/garage/Dockerfile
-    container_name: person2-garage-init
+    container_name: garage-init
     depends_on:
       - garage
     environment:
@@ -85,25 +125,28 @@ services:
       - garage_data:/mnt/data
     restart: "no"
     networks:
-      - person2-net
+      - gold-net
 
   garage-webui:
     image: khairul169/garage-webui:latest
-    container_name: person2-garage-webui
+    container_name: garage-webui
     depends_on:
       - garage
     restart: unless-stopped
     ports:
       - "3909:3909"
+    volumes:
+      - ./garage.toml:/etc/garage.toml
     environment:
       API_BASE_URL: "http://garage:3903"
       S3_ENDPOINT_URL: "http://garage:3900"
+      AUTH_USER_PASS: 'admin:$2y$10$7o8xlJPWHvdSCDXVefF5M.zUPoKI/C0l6meAwvOvdRxnRy.m5E/pC'
     networks:
-      - person2-net
+      - gold-net
 
 volumes:
   garage_data:
 
 networks:
-  person2-net:
+  gold-net:
     driver: bridge
