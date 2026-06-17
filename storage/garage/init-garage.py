@@ -85,45 +85,39 @@ def ensure_layout():
 def create_key():
     global ACCESS_KEY_ID, SECRET_KEY
 
-    try:
-        output = gar("key", "create", KEY_NAME)
+    existing = gar("key", "list")
+    for line in existing.splitlines():
+        parts = line.strip().split()
+        if len(parts) >= 3 and parts[2] == KEY_NAME:
+            ACCESS_KEY_ID = parts[0]
+            break
+
+    if ACCESS_KEY_ID:
+        output = gar("key", "info", ACCESS_KEY_ID)
         for line in output.splitlines():
             stripped = line.strip()
-            if stripped.startswith("Key ID:"):
-                ACCESS_KEY_ID = stripped.split(":", 1)[1].strip()
-            elif stripped.startswith("Secret key:"):
+            if stripped.startswith("Secret key:"):
                 SECRET_KEY = stripped.split(":", 1)[1].strip()
         if ACCESS_KEY_ID and SECRET_KEY:
-            print(f"Created key '{KEY_NAME}' — AK: {ACCESS_KEY_ID}")
             gar("key", "allow", "--create-bucket", ACCESS_KEY_ID)
-            print(f"Granted create-bucket permission to {ACCESS_KEY_ID}")
+            print(f"Reusing existing key '{KEY_NAME}' — AK: {ACCESS_KEY_ID}")
             return
-        print(f"Unexpected key create output: {output}")
-        exit(1)
-    except RuntimeError as e:
-        if "already exists" in str(e).lower():
-            print(f"Key '{KEY_NAME}' already exists, fetching...")
-        else:
-            print(f"garage key create failed: {e}")
-            exit(1)
-
-    try:
-        output = gar("key", "info", KEY_NAME)
-        for line in output.splitlines():
-            stripped = line.strip()
-            if stripped.startswith("Key ID:"):
-                ACCESS_KEY_ID = stripped.split(":", 1)[1].strip()
-            elif stripped.startswith("Secret key:"):
-                SECRET_KEY = stripped.split(":", 1)[1].strip()
-        if ACCESS_KEY_ID:
-            gar("key", "allow", "--create-bucket", ACCESS_KEY_ID)
-            print(f"Found existing key — AK: {ACCESS_KEY_ID}")
-            return
-    except RuntimeError as e:
-        print(f"garage key info failed: {e}")
+        print(f"Found key ID {ACCESS_KEY_ID} but could not get secret key from info")
         exit(1)
 
-    print(f"Key '{KEY_NAME}' not found. Exiting.")
+    output = gar("key", "create", KEY_NAME)
+    for line in output.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("Key ID:"):
+            ACCESS_KEY_ID = stripped.split(":", 1)[1].strip()
+        elif stripped.startswith("Secret key:"):
+            SECRET_KEY = stripped.split(":", 1)[1].strip()
+    if ACCESS_KEY_ID and SECRET_KEY:
+        gar("key", "allow", "--create-bucket", ACCESS_KEY_ID)
+        print(f"Created key '{KEY_NAME}' — AK: {ACCESS_KEY_ID}")
+        return
+
+    print(f"Unexpected key create output: {output}")
     exit(1)
 
 
@@ -131,10 +125,10 @@ def get_bucket_global_id(bucket_name):
     out = gar("bucket", "list")
     for line in out.splitlines():
         stripped = line.strip()
-        if stripped.startswith(f"{ACCESS_KEY_ID}:{bucket_name}") or stripped.startswith(bucket_name):
+        if f"{ACCESS_KEY_ID}:{bucket_name}" in stripped:
             parts = stripped.split()
-            if len(parts) >= 2:
-                return parts[1]
+            if len(parts) >= 1:
+                return parts[0]
     return None
 
 
@@ -149,14 +143,22 @@ def create_buckets():
         config=boto3.session.Config(signature_version="s3v4"),
     )
 
+    existing_ids = set()
+    out = gar("bucket", "list")
+    for line in out.splitlines():
+        if f"{ACCESS_KEY_ID}:" in line:
+            parts = line.strip().split()
+            if len(parts) >= 2:
+                existing_ids.add(parts[0])
+
     for bucket in BUCKETS:
-        try:
-            client.head_bucket(Bucket=bucket)
-            print(f"Bucket '{bucket}' already exists")
-        except Exception:
-            client.create_bucket(Bucket=bucket)
-            print(f"Created bucket '{bucket}'")
         gid = get_bucket_global_id(bucket)
+        if gid:
+            print(f"Bucket '{bucket}' already exists (id={gid})")
+        else:
+            client.create_bucket(Bucket=bucket)
+            gid = get_bucket_global_id(bucket)
+            print(f"Created bucket '{bucket}' (id={gid})")
         if gid:
             gar("bucket", "allow", "--read", "--write", "--owner", "--key", ACCESS_KEY_ID, gid)
             print(f"Granted read/write/owner on '{bucket}' to key {ACCESS_KEY_ID}")

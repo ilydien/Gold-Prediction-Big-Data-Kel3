@@ -34,6 +34,7 @@ services:
       KAFKA_TOPIC: gold_stream
       MIN_INTERVAL: "1"
       MAX_INTERVAL: "5"
+      PYTHONUNBUFFERED: "1"
     restart: unless-stopped
     networks:
       - gold-net
