@@ -95,9 +95,12 @@ services:
     restart: unless-stopped
     ports:
       - "3909:3909"
+    volumes:
+      - ./garage.toml:/etc/garage.toml
     environment:
       API_BASE_URL: "http://garage:3903"
       S3_ENDPOINT_URL: "http://garage:3900"
+      AUTH_USER_PASS: 'admin:$2y$10$7o8xlJPWHvdSCDXVefF5M.zUPoKI/C0l6meAwvOvdRxnRy.m5E/pC'
     networks:
       - person2-net
 
