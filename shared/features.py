@@ -3,19 +3,6 @@ import pandas as pd
 FEATURE_COLUMNS = [
     # Lag features (7)
     "lag_1",
-<<<<<<< HEAD
-    "lag_5",
-    "lag_10",
-    "rolling_mean_5",
-    "rolling_std_5",
-    "return_gold",
-    "return_oil",
-    "return_dxy",
-    "return_eurusd",
-    "return_jpy",
-    "lag_1_oil",
-    "lag_1_dxy",
-=======
     "lag_3",
     "lag_6",
     "lag_12",
@@ -48,7 +35,6 @@ FEATURE_COLUMNS = [
     # Calendar (2)
     "hour_of_day",
     "day_of_week",
->>>>>>> 09f4d05 (feat: multi-horizon forecasting with yfinance data source (25 features, 6 horizons))
 ]
 
 TARGET_COLUMN = "gold_price"
@@ -77,16 +63,6 @@ def compute_features(df: pd.DataFrame) -> pd.DataFrame:
     result["rolling_mean_168"] = result["gold_price"].rolling(168, min_periods=1).mean()
     result["rolling_std_168"] = result["gold_price"].rolling(168, min_periods=1).std()
 
-<<<<<<< HEAD
-    result["return_gold"] = result["gold_price"].pct_change()
-    result["return_oil"] = result["oil_price"].pct_change()
-    result["return_dxy"] = result["dxy"].pct_change()
-    result["return_eurusd"] = result["eurusd"].pct_change()
-    result["return_jpy"] = result["jpy"].pct_change()
-
-    result["lag_1_oil"] = result["oil_price"].shift(1)
-    result["lag_1_dxy"] = result["dxy"].shift(1)
-=======
     # Returns
     result["return_1h"] = result["gold_price"].pct_change(1)
     result["return_24h"] = result["gold_price"].pct_change(24)
@@ -105,7 +81,6 @@ def compute_features(df: pd.DataFrame) -> pd.DataFrame:
     timestamps = pd.to_datetime(result["timestamp"], format="mixed")
     result["hour_of_day"] = timestamps.dt.hour
     result["day_of_week"] = timestamps.dt.dayofweek
->>>>>>> 09f4d05 (feat: multi-horizon forecasting with yfinance data source (25 features, 6 horizons))
 
     return result
 

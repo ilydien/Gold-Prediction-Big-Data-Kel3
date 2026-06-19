@@ -77,9 +77,6 @@ def write_processed_to_garage(df, epoch_id):
     buffer = minutely.to_parquet(index=False)
     filename = f"{_ts()}/processed.parquet"
     s3_client.put_object(Bucket="processed-data", Key=filename, Body=buffer)
-<<<<<<< HEAD
-    print(f"Wrote {len(minutely)} minutely rows to processed-data/{filename}")
-=======
     print(f"Wrote {len(pdf)} processed rows to processed-data/{filename}")
 
 
@@ -127,7 +124,6 @@ def predict_via_fastapi(df, epoch_id):
             print(f"FastAPI error: {resp.status_code} {resp.text}")
     except Exception as e:
         print(f"FastAPI request failed: {e}")
->>>>>>> 09f4d05 (feat: multi-horizon forecasting with yfinance data source (25 features, 6 horizons))
 
 
 stream_df = (
@@ -159,9 +155,6 @@ processed_query = (
     .trigger(processingTime=f"{PROCESSING_INTERVAL} seconds")
     .start()
 )
-<<<<<<< HEAD
-print("Streaming aggregated processed data to Garage...")
-=======
 print("Streaming processed data to Garage...")
 
 hourly_query = (
@@ -179,6 +172,5 @@ predict_query = (
     .start()
 )
 print("Sending features to FastAPI...")
->>>>>>> 09f4d05 (feat: multi-horizon forecasting with yfinance data source (25 features, 6 horizons))
 
 spark.streams.awaitAnyTermination()

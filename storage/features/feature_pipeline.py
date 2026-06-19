@@ -10,10 +10,7 @@ from shared.features import FEATURE_COLUMNS, TARGET_COLUMN, compute_features
 GARAGE_ENDPOINT = os.getenv("GARAGE_ENDPOINT", "http://localhost:3900")
 GARAGE_ACCESS_KEY = os.getenv("GARAGE_ACCESS_KEY", "")
 GARAGE_SECRET_KEY = os.getenv("GARAGE_SECRET_KEY", "")
-<<<<<<< HEAD
-=======
 DATA_SOURCE = os.getenv("DATA_SOURCE", "garage").lower()
->>>>>>> 09f4d05 (feat: multi-horizon forecasting with yfinance data source (25 features, 6 horizons))
 MAX_RETRIES = int(os.getenv("GARAGE_RETRIES", "3"))
 RETRY_DELAY = int(os.getenv("GARAGE_RETRY_DELAY", "5"))
 
@@ -126,20 +123,7 @@ def run_feature_pipeline():
         print(f"Unknown DATA_SOURCE: {DATA_SOURCE}")
         return
 
-<<<<<<< HEAD
-    all_data = []
-    for f in processed_files:
-        print(f"  Downloading: {f}")
-        df = read_parquet_from_garage("processed-data", f)
-        all_data.append(df)
-
-    combined = pd.concat(all_data, ignore_index=True)
-    print(f"Loaded {len(combined)} rows from {len(processed_files)} files")
-
-    features = compute_features(combined)
-=======
     features = compute_features(df)
->>>>>>> 09f4d05 (feat: multi-horizon forecasting with yfinance data source (25 features, 6 horizons))
     features_clean = features.dropna(subset=FEATURE_COLUMNS).reset_index(drop=True)
     print(f"Computed features: {len(features_clean)} rows")
 
