@@ -4,9 +4,8 @@ from datetime import datetime, timezone
 
 import boto3
 import pandas as pd
-import requests
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import col, from_json
+from pyspark.sql.functions import col, from_json, window
 from pyspark.sql.types import (
     DoubleType,
     StructField,
@@ -14,14 +13,11 @@ from pyspark.sql.types import (
     TimestampType,
 )
 
-from shared.features import FEATURE_COLUMNS, compute_features
-
 KAFKA_BROKER = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")
 TOPIC = os.getenv("KAFKA_TOPIC", "gold_stream")
 GARAGE_ENDPOINT = os.getenv("GARAGE_ENDPOINT", "http://localhost:3900")
 GARAGE_ACCESS_KEY = os.getenv("GARAGE_ACCESS_KEY", "")
 GARAGE_SECRET_KEY = os.getenv("GARAGE_SECRET_KEY", "")
-FASTAPI_URL = os.getenv("FASTAPI_URL", "http://localhost:8000/predict")
 PROCESSING_INTERVAL = os.getenv("PROCESSING_INTERVAL", "10")
 
 schema = StructType(
@@ -55,7 +51,9 @@ s3_client = boto3.client(
     config=boto3.session.Config(signature_version="s3v4"),
 )
 
-_history_buffer = pd.DataFrame()
+
+def _ts():
+    return datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S-%f")
 
 
 def write_raw_to_garage(df, epoch_id):
@@ -64,7 +62,7 @@ def write_raw_to_garage(df, epoch_id):
     pdf = df.toPandas()
     pdf["processing_time"] = datetime.now(timezone.utc).isoformat()
     buffer = pdf.to_parquet(index=False)
-    filename = f"batch={epoch_id}/data.parquet"
+    filename = f"{_ts()}/raw.parquet"
     s3_client.put_object(Bucket="raw-data", Key=filename, Body=buffer)
     print(f"Wrote {len(pdf)} raw rows to raw-data/{filename}")
 
@@ -74,39 +72,15 @@ def write_processed_to_garage(df, epoch_id):
         return
     pdf = df.toPandas()
     pdf["processing_time"] = datetime.now(timezone.utc).isoformat()
-    buffer = pdf.to_parquet(index=False)
-    filename = f"batch={epoch_id}/data.parquet"
+
+    pdf["_minute"] = pdf["timestamp"].dt.floor("1min")
+    minutely = pdf.groupby("_minute", as_index=False).last()
+    minutely = minutely.drop(columns=["_minute"])
+
+    buffer = minutely.to_parquet(index=False)
+    filename = f"{_ts()}/processed.parquet"
     s3_client.put_object(Bucket="processed-data", Key=filename, Body=buffer)
-    print(f"Wrote {len(pdf)} processed rows to processed-data/{filename}")
-
-
-def predict_via_fastapi(df, epoch_id):
-    global _history_buffer
-    if df.count() == 0:
-        return
-
-    pdf = df.toPandas()
-    _history_buffer = pd.concat([_history_buffer, pdf], ignore_index=True)
-    _history_buffer = _history_buffer.tail(50)
-
-    features = compute_features(_history_buffer)
-    last_row = features.dropna(subset=FEATURE_COLUMNS)
-    if last_row.empty:
-        return
-
-    latest = last_row.iloc[-1]
-    payload = {
-        "timestamp": str(latest.get("timestamp", "")),
-        "features": {col: latest[col] for col in FEATURE_COLUMNS},
-    }
-    try:
-        resp = requests.post(FASTAPI_URL, json=payload, timeout=5)
-        if resp.ok:
-            print(f"Prediction sent: {resp.json()}")
-        else:
-            print(f"FastAPI error: {resp.status_code} {resp.text}")
-    except Exception as e:
-        print(f"FastAPI request failed: {e}")
+    print(f"Wrote {len(minutely)} minutely rows to processed-data/{filename}")
 
 
 stream_df = (
@@ -138,14 +112,6 @@ processed_query = (
     .trigger(processingTime=f"{PROCESSING_INTERVAL} seconds")
     .start()
 )
-print("Streaming processed data to Garage...")
-
-predict_query = (
-    parsed_df.writeStream.foreachBatch(predict_via_fastapi)
-    .outputMode("update")
-    .trigger(processingTime=f"{PROCESSING_INTERVAL} seconds")
-    .start()
-)
-print("Sending features to FastAPI...")
+print("Streaming aggregated processed data to Garage...")
 
 spark.streams.awaitAnyTermination()
