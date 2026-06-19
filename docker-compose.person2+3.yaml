@@ -103,9 +103,41 @@ services:
     image: prefecthq/prefect:3-latest
     container_name: person3-prefect
     hostname: prefect
-    command: prefect server start
+    command: prefect server start --host 0.0.0.0
+    environment:
+      PREFECT_SERVER_ANALYTICS_ENABLED: "false"
     ports:
       - "4200:4200"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:4200/api/health')"]
+      interval: 5s
+      retries: 10
+      start_period: 10s
+    networks:
+      - hybrid-net
+
+  mlflow:
+    image: python:3.12-slim
+    container_name: person3-mlflow
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        pip install -q mlflow boto3
+        mlflow server \
+          --host 0.0.0.0 \
+          --port 5000 \
+          --backend-store-uri sqlite:////mlflow/mlflow.db \
+          --default-artifact-root s3://mlflow-artifacts/
+    environment:
+      AWS_ACCESS_KEY_ID: ${GARAGE_ACCESS_KEY}
+      AWS_SECRET_ACCESS_KEY: ${GARAGE_SECRET_KEY}
+      MLFLOW_S3_ENDPOINT_URL: ${GARAGE_ENDPOINT:-http://garage:3900}
+      MLFLOW_S3_IGNORE_TLS: "true"
+    ports:
+      - "5000:5000"
+    volumes:
+      - mlflow_data:/mlflow
     restart: unless-stopped
     networks:
       - hybrid-net
@@ -116,8 +148,12 @@ services:
       dockerfile: storage/trainer/Dockerfile
     container_name: person3-ml-training
     depends_on:
-      - garage
+      garage:
+        condition: service_started
+      prefect:
+        condition: service_healthy
     environment:
+      PREFECT_API_URL: http://prefect:4200/api
       GARAGE_ENDPOINT: http://garage:3900
       GARAGE_ACCESS_KEY: ${GARAGE_ACCESS_KEY}
       GARAGE_SECRET_KEY: ${GARAGE_SECRET_KEY}
@@ -126,12 +162,24 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-gold_prediction}
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
-    restart: "no"
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+      RETRAIN_COUNT_THRESHOLD: ${RETRAIN_COUNT_THRESHOLD:-2000}
+      RETRAIN_PERF_WINDOW: ${RETRAIN_PERF_WINDOW:-100}
+      RETRAIN_PERF_FACTOR: ${RETRAIN_PERF_FACTOR:-1.5}
+    command:
+      - /bin/sh
+      - -c
+      - |
+        prefect work-pool create gold-pool --type process 2>/dev/null || true
+        python -m storage.prefect.deploy
+        exec prefect worker start --pool gold-pool --type process
+    restart: unless-stopped
     networks:
       - hybrid-net
 
 volumes:
   garage_data:
+  mlflow_data:
 
 networks:
   hybrid-net:

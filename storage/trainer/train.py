@@ -6,13 +6,13 @@ from datetime import datetime, timezone
 
 import boto3
 import joblib
+import mlflow
 import pandas as pd
 import psycopg2
-from sklearn.ensemble import GradientBoostingRegressor, RandomForestRegressor
+from sklearn.ensemble import GradientBoostingRegressor
 from sklearn.linear_model import LinearRegression
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 from sklearn.model_selection import GridSearchCV, TimeSeriesSplit, train_test_split
-from sklearn.neighbors import KNeighborsRegressor
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 
@@ -26,6 +26,7 @@ POSTGRES_PORT = os.getenv("POSTGRES_PORT", "5432")
 POSTGRES_DB = os.getenv("POSTGRES_DB", "gold_prediction")
 POSTGRES_USER = os.getenv("POSTGRES_USER", "postgres")
 POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD", "postgres")
+MLFLOW_TRACKING_URI = os.getenv("MLFLOW_TRACKING_URI", "http://mlflow:5000")
 
 s3 = boto3.client(
     "s3",
@@ -42,14 +43,6 @@ MODELS = {
         ("scaler", StandardScaler()),
         ("lr", LinearRegression()),
     ]),
-    "knn": Pipeline([
-        ("scaler", StandardScaler()),
-        ("knn", KNeighborsRegressor()),
-    ]),
-    "random_forest": Pipeline([
-        ("scaler", StandardScaler()),
-        ("rf", RandomForestRegressor(random_state=42)),
-    ]),
     "gradient_boosting": Pipeline([
         ("scaler", StandardScaler()),
         ("gbr", GradientBoostingRegressor(random_state=42)),
@@ -58,14 +51,6 @@ MODELS = {
 
 PARAM_GRIDS = {
     "linear_regression": {},
-    "knn": {
-        "knn__n_neighbors": [3, 5, 7, 10],
-        "knn__weights": ["uniform", "distance"],
-    },
-    "random_forest": {
-        "rf__n_estimators": [50, 100, 200],
-        "rf__max_depth": [None, 10, 20],
-    },
     "gradient_boosting": {
         "gbr__n_estimators": [50, 100, 200],
         "gbr__learning_rate": [0.05, 0.1],
@@ -73,7 +58,7 @@ PARAM_GRIDS = {
     },
 }
 
-FEATURE_IMPORTANCE_MODELS = {"random_forest": "rf", "gradient_boosting": "gbr"}
+FEATURE_IMPORTANCE_MODELS = {"gradient_boosting": "gbr"}
 
 
 def pg_connect():
@@ -137,6 +122,57 @@ def extract_feature_importance(model, model_name: str) -> dict:
     return {feat: round(float(imp), 6) for feat, imp in pairs}
 
 
+def _load_champion_meta():
+    try:
+        resp = s3.get_object(Bucket="models", Key="champion/metadata.json")
+        return json.loads(resp["Body"].read().decode())
+    except Exception:
+        return None
+
+
+def _record_champion_event(version: str, event: str):
+    try:
+        resp = s3.get_object(Bucket="models", Key="champion/rollback_history.json")
+        history = json.loads(resp["Body"].read().decode())
+    except Exception:
+        history = []
+    history.append({
+        "version": version,
+        "event": event,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    })
+    s3.put_object(
+        Bucket="models",
+        Key="champion/rollback_history.json",
+        Body=json.dumps(history, indent=2).encode(),
+    )
+
+
+def _update_champion(metadata: dict, buffer: io.BytesIO):
+    champion_meta = _load_champion_meta()
+    version = f"{metadata['model_name']}/{metadata['timestamp']}"
+
+    if champion_meta and metadata["mae"] >= champion_meta["mae"]:
+        print(f"Champion unchanged: new MAE {metadata['mae']:.4f} >= current {champion_meta['mae']:.4f}")
+        _record_champion_event(version, "skipped")
+        return
+
+    if champion_meta:
+        print(f"Champion promoted: MAE {champion_meta['mae']:.4f} -> {metadata['mae']:.4f}")
+    else:
+        print(f"Champion initialized: {metadata['model_name']} MAE={metadata['mae']:.4f}")
+
+    buffer.seek(0)
+    model_bytes = buffer.read()
+    s3.put_object(Bucket="models", Key="champion/model.pkl", Body=model_bytes)
+    s3.put_object(
+        Bucket="models",
+        Key="champion/metadata.json",
+        Body=json.dumps(metadata, indent=2).encode(),
+    )
+    _record_champion_event(version, "promoted_to_champion")
+
+
 def save_best_model(best_result: dict):
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     model_name = best_result["model_name"]
@@ -177,6 +213,8 @@ def save_best_model(best_result: dict):
         Body=json.dumps(metadata).encode(),
     )
 
+    _update_champion(metadata, buffer)
+
     print(f"Model saved to models/{key}")
     return metadata
 
@@ -208,6 +246,9 @@ def save_metrics_to_postgres(metadata: dict):
 
 def run_training():
     print("=== ML Training Pipeline ===")
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+
+    _configure_mlflow()
 
     for attempt in range(30):
         try:
@@ -235,7 +276,16 @@ def run_training():
         result = train_and_evaluate(model, name, X_train, X_test, y_train, y_test)
         result["n_samples"] = len(X_train)
         results.append(result)
+        _log_to_mlflow(result, timestamp)
         print(f"  {name}: MAE={result['mae']:.4f}, RMSE={result['rmse']:.4f}, R²={result['r2']:.4f}")
+
+    print(f"\n{'='*60}")
+    print(f"  MODEL COMPARISON")
+    print(f"  {'Model':<22s} {'MAE':>10s}  {'RMSE':>10s}  {'R²':>8s}")
+    print(f"  {'-'*53}")
+    for r in sorted(results, key=lambda x: x["mae"]):
+        print(f"  {r['model_name']:<22s} {r['mae']:>10.4f}  {r['rmse']:>10.4f}  {r['r2']:>8.4f}")
+    print(f"{'='*60}\n")
 
     best = min(results, key=lambda r: r["mae"])
     print(f"\nBest model: {best['model_name']} (MAE={best['mae']:.4f})")
@@ -251,6 +301,34 @@ def run_training():
     save_metrics_to_postgres(metadata)
     print("\n=== Training Complete ===")
     return metadata
+
+
+def _configure_mlflow():
+    try:
+        mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
+        mlflow.set_experiment("gold_price_prediction")
+    except Exception as e:
+        print(f"MLflow unavailable (tracking only): {e}")
+
+
+def _log_to_mlflow(result: dict, timestamp: str):
+    try:
+        name = result["model_name"]
+        with mlflow.start_run(run_name=f"{name}_{timestamp}"):
+            if result.get("best_params"):
+                mlflow.log_params(result["best_params"])
+            mlflow.log_metrics({
+                "mae": result["mae"],
+                "rmse": result["rmse"],
+                "r2": result["r2"],
+            })
+            if name in FEATURE_IMPORTANCE_MODELS:
+                importance = extract_feature_importance(result["model"], name)
+                for feat, imp in importance.items():
+                    mlflow.log_metric(f"importance_{feat}", imp)
+            mlflow.sklearn.log_model(result["model"], name)
+    except Exception as e:
+        print(f"  MLflow skipped for {name}: {e}")
 
 
 if __name__ == "__main__":

@@ -1,0 +1,54 @@
+name: ML Pipeline CI
+
+on:
+  push:
+    paths:
+      - "storage/trainer/**"
+      - "storage/prefect/**"
+      - "storage/features/**"
+      - "shared/**"
+      - "tests/**"
+      - ".github/workflows/ml-pipeline.yml"
+  pull_request:
+    paths:
+      - "storage/trainer/**"
+      - "storage/prefect/**"
+      - "storage/features/**"
+      - "shared/**"
+      - "tests/**"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install pandas numpy scikit-learn joblib boto3 psycopg2-binary prefect mlflow pytest
+
+      - name: Run model tests
+        run: pytest tests/ -v
+
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: |
+          docker build \
+            -f storage/trainer/Dockerfile \
+            -t ml-training:latest \
+            .
+
+      - name: Verify image
+        run: docker images ml-training
