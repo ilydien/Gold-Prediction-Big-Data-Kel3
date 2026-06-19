@@ -9,6 +9,10 @@ FEATURE_COLUMNS = [
     "return_gold",
     "return_oil",
     "return_dxy",
+    "return_eurusd",
+    "return_jpy",
+    "lag_1_oil",
+    "lag_1_dxy",
 ]
 
 TARGET_COLUMN = "gold_price"
@@ -33,6 +37,11 @@ def compute_features(df: pd.DataFrame) -> pd.DataFrame:
     result["return_gold"] = result["gold_price"].pct_change()
     result["return_oil"] = result["oil_price"].pct_change()
     result["return_dxy"] = result["dxy"].pct_change()
+    result["return_eurusd"] = result["eurusd"].pct_change()
+    result["return_jpy"] = result["jpy"].pct_change()
+
+    result["lag_1_oil"] = result["oil_price"].shift(1)
+    result["lag_1_dxy"] = result["dxy"].shift(1)
 
     return result
 

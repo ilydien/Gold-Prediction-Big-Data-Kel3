@@ -8,11 +8,13 @@ import boto3
 import joblib
 import pandas as pd
 import psycopg2
-from sklearn.ensemble import RandomForestRegressor
+from sklearn.ensemble import GradientBoostingRegressor, RandomForestRegressor
 from sklearn.linear_model import LinearRegression
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import GridSearchCV, TimeSeriesSplit, train_test_split
 from sklearn.neighbors import KNeighborsRegressor
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import StandardScaler
 
 from shared.features import FEATURE_COLUMNS, TARGET_COLUMN
 
@@ -36,10 +38,42 @@ s3 = boto3.client(
 )
 
 MODELS = {
-    "linear_regression": LinearRegression(),
-    "knn": KNeighborsRegressor(n_neighbors=5),
-    "random_forest": RandomForestRegressor(n_estimators=100, random_state=42),
+    "linear_regression": Pipeline([
+        ("scaler", StandardScaler()),
+        ("lr", LinearRegression()),
+    ]),
+    "knn": Pipeline([
+        ("scaler", StandardScaler()),
+        ("knn", KNeighborsRegressor()),
+    ]),
+    "random_forest": Pipeline([
+        ("scaler", StandardScaler()),
+        ("rf", RandomForestRegressor(random_state=42)),
+    ]),
+    "gradient_boosting": Pipeline([
+        ("scaler", StandardScaler()),
+        ("gbr", GradientBoostingRegressor(random_state=42)),
+    ]),
 }
+
+PARAM_GRIDS = {
+    "linear_regression": {},
+    "knn": {
+        "knn__n_neighbors": [3, 5, 7, 10],
+        "knn__weights": ["uniform", "distance"],
+    },
+    "random_forest": {
+        "rf__n_estimators": [50, 100, 200],
+        "rf__max_depth": [None, 10, 20],
+    },
+    "gradient_boosting": {
+        "gbr__n_estimators": [50, 100, 200],
+        "gbr__learning_rate": [0.05, 0.1],
+        "gbr__max_depth": [3, 5],
+    },
+}
+
+FEATURE_IMPORTANCE_MODELS = {"random_forest": "rf", "gradient_boosting": "gbr"}
 
 
 def pg_connect():
@@ -61,15 +95,46 @@ def load_features() -> pd.DataFrame:
 
 
 def train_and_evaluate(model, model_name: str, X_train, X_test, y_train, y_test):
-    model.fit(X_train, y_train)
-    y_pred = model.predict(X_test)
+    param_grid = PARAM_GRIDS.get(model_name, {})
+    if param_grid:
+        tscv = TimeSeriesSplit(n_splits=3)
+        search = GridSearchCV(
+            model, param_grid, cv=tscv, scoring="neg_mean_absolute_error", n_jobs=1
+        )
+        search.fit(X_train, y_train)
+        best_model = search.best_estimator_
+        best_params = {
+            k.split("__", 1)[-1]: v for k, v in search.best_params_.items()
+        }
+        print(f"  {model_name} best params: {best_params}")
+    else:
+        best_model = model
+        best_model.fit(X_train, y_train)
+        best_params = {}
+
+    y_pred = best_model.predict(X_test)
     return {
         "model_name": model_name,
         "mae": mean_absolute_error(y_test, y_pred),
         "rmse": mean_squared_error(y_test, y_pred) ** 0.5,
         "r2": r2_score(y_test, y_pred),
-        "model": model,
+        "model": best_model,
+        "best_params": best_params,
     }
+
+
+def extract_feature_importance(model, model_name: str) -> dict:
+    step_name = FEATURE_IMPORTANCE_MODELS.get(model_name)
+    if not step_name:
+        return {}
+    estimator = model.named_steps.get(step_name)
+    if not hasattr(estimator, "feature_importances_"):
+        return {}
+    importances = estimator.feature_importances_
+    pairs = sorted(
+        zip(FEATURE_COLUMNS, importances), key=lambda x: x[1], reverse=True
+    )
+    return {feat: round(float(imp), 6) for feat, imp in pairs}
 
 
 def save_best_model(best_result: dict):
@@ -87,7 +152,13 @@ def save_best_model(best_result: dict):
         "mae": best_result["mae"],
         "rmse": best_result["rmse"],
         "r2": best_result["r2"],
+        "best_params": best_result.get("best_params", {}),
         "features": FEATURE_COLUMNS,
+        "n_features": len(FEATURE_COLUMNS),
+        "n_samples": best_result.get("n_samples", 0),
+        "feature_importance": extract_feature_importance(
+            best_result["model"], model_name
+        ),
     }
     s3.put_object(
         Bucket="models",
@@ -162,15 +233,24 @@ def run_training():
     results = []
     for name, model in MODELS.items():
         result = train_and_evaluate(model, name, X_train, X_test, y_train, y_test)
+        result["n_samples"] = len(X_train)
         results.append(result)
         print(f"  {name}: MAE={result['mae']:.4f}, RMSE={result['rmse']:.4f}, R²={result['r2']:.4f}")
 
     best = min(results, key=lambda r: r["mae"])
-    print(f"Best model: {best['model_name']} (MAE={best['mae']:.4f})")
+    print(f"\nBest model: {best['model_name']} (MAE={best['mae']:.4f})")
+
+    importance = extract_feature_importance(best["model"], best["model_name"])
+    if importance:
+        print("\nFeature importance:")
+        for feat, imp in importance.items():
+            bar = "█" * int(imp * 50) if imp > 0 else ""
+            print(f"  {feat:20s} {imp:.4f} {bar}")
 
     metadata = save_best_model(best)
     save_metrics_to_postgres(metadata)
-    print("=== Training Complete ===")
+    print("\n=== Training Complete ===")
+    return metadata
 
 
 if __name__ == "__main__":

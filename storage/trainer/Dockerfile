@@ -8,7 +8,8 @@ RUN pip install --no-cache-dir --timeout 120 -i https://pypi.tuna.tsinghua.edu.c
 COPY shared/ /app/shared/
 COPY storage/features/ /app/storage/features/
 COPY storage/trainer/ /app/storage/trainer/
+COPY storage/prefect/ /app/storage/prefect/
 
 ENV PYTHONPATH=/app
 
-CMD ["python", "-m", "storage.trainer.train"]
+CMD ["python", "-m", "storage.prefect.flows"]
