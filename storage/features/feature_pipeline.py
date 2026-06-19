@@ -1,5 +1,6 @@
 import io
 import os
+import time
 
 import boto3
 import pandas as pd
@@ -9,6 +10,8 @@ from shared.features import FEATURE_COLUMNS, TARGET_COLUMN, compute_features
 GARAGE_ENDPOINT = os.getenv("GARAGE_ENDPOINT", "http://localhost:3900")
 GARAGE_ACCESS_KEY = os.getenv("GARAGE_ACCESS_KEY", "")
 GARAGE_SECRET_KEY = os.getenv("GARAGE_SECRET_KEY", "")
+MAX_RETRIES = int(os.getenv("GARAGE_RETRIES", "3"))
+RETRY_DELAY = int(os.getenv("GARAGE_RETRY_DELAY", "5"))
 
 s3 = boto3.client(
     "s3",
@@ -21,19 +24,40 @@ s3 = boto3.client(
 )
 
 
+def _retry_s3(fn, desc: str):
+    for attempt in range(1, MAX_RETRIES + 1):
+        try:
+            return fn()
+        except Exception as e:
+            if attempt == MAX_RETRIES:
+                raise
+            print(f"  Retry {attempt}/{MAX_RETRIES} for {desc}: {e}")
+            time.sleep(RETRY_DELAY * attempt)
+
+
 def list_parquet_files(bucket: str) -> list[str]:
     keys = []
-    paginator = s3.get_paginator("list_objects_v2")
-    for page in paginator.paginate(Bucket=bucket):
-        for obj in page.get("Contents", []):
-            if obj["Key"].endswith(".parquet"):
-                keys.append(obj["Key"])
+
+    def _list():
+        nonlocal keys
+        keys = []
+        paginator = s3.get_paginator("list_objects_v2")
+        for page in paginator.paginate(Bucket=bucket):
+            for obj in page.get("Contents", []):
+                if obj["Key"].endswith(".parquet"):
+                    keys.append(obj["Key"])
+        return keys
+
+    _retry_s3(_list, f"list {bucket}")
     return keys
 
 
 def read_parquet_from_garage(bucket: str, key: str) -> pd.DataFrame:
-    response = s3.get_object(Bucket=bucket, Key=key)
-    return pd.read_parquet(io.BytesIO(response["Body"].read()))
+    def _read():
+        response = s3.get_object(Bucket=bucket, Key=key)
+        return pd.read_parquet(io.BytesIO(response["Body"].read()))
+
+    return _retry_s3(_read, f"download {key}")
 
 
 def write_parquet_to_garage(df: pd.DataFrame, bucket: str, prefix: str):
@@ -53,6 +77,7 @@ def run_feature_pipeline():
 
     all_data = []
     for f in processed_files:
+        print(f"  Downloading: {f}")
         df = read_parquet_from_garage("processed-data", f)
         all_data.append(df)
 

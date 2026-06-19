@@ -30,7 +30,7 @@ graph TD
     subgraph "Person 3 - Fatih"
         GB2 -.->|remote read| PF[Prefect Flow]
         PF -->|shared/features.py| GB3[Garage (remote)<br/>features]
-        GB3 --> TR[ML Training<br/>LR + KNN + RF]
+        GB3 --> TR[ML Training<br/>LR + GBR]
         TR -->|MAE/RMSE/R²| GB4[Garage (remote)<br/>models]
         TR -.->|remote write| PG[(PostgreSQL<br/>metrics)]
     end
@@ -49,7 +49,7 @@ graph TD
 2. **Spark Structured Streaming** (Dio) consume dari Kafka, simpan raw + processed data ke Garage.
 3. **Spark** juga POST feature vector ke FastAPI untuk prediksi real-time.
 4. **Prefect** (Fatih) menjalankan feature engineering batch dari processed-data ke features bucket.
-5. **ML Training** (Fatih) membaca features dari Garage (via Tailscale ke Dio), train 3 model (LR, KNN, RF), pilih terbaik, simpan ke Garage.
+5. **ML Training** (Fatih) membaca features dari Garage (via Tailscale ke Dio), train 2 model (LR, GBR), pilih terbaik, simpan ke Garage.
 6. **FastAPI** (Angel) load model dari Garage saat startup (via Tailscale ke Dio), simpan di RAM.
 7. **FastAPI** menerima features → predict → simpan ke PostgreSQL.
 8. **Grafana** visualisasi dari PostgreSQL.
@@ -76,8 +76,7 @@ Semua feature dihitung dengan `shared/features.py` (kode SAMA untuk training dan
 ## Models
 
 1. Linear Regression
-2. K-Nearest Neighbors (KNN)
-3. Random Forest Regressor
+2. Gradient Boosting Regressor
 
 Evaluasi: MAE, RMSE, R². Model terbaik otomatis disimpan ke Garage.
 
@@ -138,6 +137,7 @@ Detail: lihat `TAILSCALE-SETUP.md`
 | Garage S3 API | `3900` | Person 2 |
 | Garage Web | `3902` | Person 2 |
 | Prefect UI | `4200` | Person 3 |
+| MLflow UI | `5000` | Person 3 |
 | FastAPI | `8000` | Person 4 |
 | PostgreSQL | `5432` | Person 4 |
 | Grafana | `3000` | Person 4 |

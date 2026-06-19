@@ -126,6 +126,9 @@ def should_retrain() -> tuple[bool, str, int]:
     if not last_state:
         return True, "First training run (no previous state)", 0
 
+    if last_state.get("best_mae", 0) <= 0:
+        return True, "Previous training state invalid (MAE=0), forcing retrain", 0
+
     triggered, new_objects = check_count_trigger(last_state)
     if triggered:
         return True, (
