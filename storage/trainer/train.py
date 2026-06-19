@@ -13,6 +13,8 @@ from sklearn.linear_model import LinearRegression
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 from sklearn.model_selection import train_test_split
 from sklearn.neighbors import KNeighborsRegressor
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import StandardScaler
 
 from shared.features import FEATURE_COLUMNS, TARGET_COLUMN
 
@@ -36,9 +38,18 @@ s3 = boto3.client(
 )
 
 MODELS = {
-    "linear_regression": LinearRegression(),
-    "knn": KNeighborsRegressor(n_neighbors=5),
-    "random_forest": RandomForestRegressor(n_estimators=100, random_state=42),
+    "linear_regression": Pipeline([
+        ("scaler", StandardScaler()),
+        ("lr", LinearRegression()),
+    ]),
+    "knn": Pipeline([
+        ("scaler", StandardScaler()),
+        ("knn", KNeighborsRegressor(n_neighbors=5)),
+    ]),
+    "random_forest": Pipeline([
+        ("scaler", StandardScaler()),
+        ("rf", RandomForestRegressor(n_estimators=100, random_state=42)),
+    ]),
 }
 
 
