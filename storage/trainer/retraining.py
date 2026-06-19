@@ -74,7 +74,10 @@ def _count_objects(bucket: str) -> int:
 
 def check_count_trigger(last_state: dict) -> tuple[bool, int]:
     prev_count = last_state.get("object_count", 0)
-    curr_count = _count_objects("processed-data") + _count_objects("hourly-history")
+    try:
+        curr_count = _count_objects("processed-data") + _count_objects("hourly-history")
+    except Exception:
+        curr_count = _count_objects("processed-data")
     new_objects = curr_count - prev_count
     if new_objects >= COUNT_THRESHOLD:
         return True, new_objects
@@ -131,7 +134,10 @@ def should_retrain() -> tuple[bool, str, int]:
             reasons.append(f"h={h}: invalid state (MAE=0)")
             continue
 
-    new_objects = _count_objects("processed-data") + _count_objects("hourly-history")
+    try:
+        new_objects = _count_objects("processed-data") + _count_objects("hourly-history")
+    except Exception:
+        new_objects = _count_objects("processed-data")
     triggered_count, _ = check_count_trigger(load_training_state(PREDICTION_HORIZONS[0]) or {})
 
     if triggered_count:
