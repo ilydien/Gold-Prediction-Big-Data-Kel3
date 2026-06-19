@@ -250,6 +250,7 @@ def run_training():
     metadata = save_best_model(best)
     save_metrics_to_postgres(metadata)
     print("\n=== Training Complete ===")
+    return metadata
 
 
 if __name__ == "__main__":
