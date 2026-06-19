@@ -46,8 +46,9 @@ services:
       GARAGE_ENDPOINT: http://garage:3900
       GARAGE_ACCESS_KEY: ${GARAGE_ACCESS_KEY}
       GARAGE_SECRET_KEY: ${GARAGE_SECRET_KEY}
-      FASTAPI_URL: ${FASTAPI_URL}
-      PROCESSING_INTERVAL: "10"
+      PROCESSING_INTERVAL: "1"
+    volumes:
+      - ivy_cache:/root/.ivy2
     restart: unless-stopped
     networks:
       - person2-net
@@ -70,22 +71,23 @@ services:
     networks:
       - person2-net
 
-  garage-init:
-    build:
-      context: .
-      dockerfile: storage/garage/Dockerfile
-    container_name: person2-garage-init
-    depends_on:
-      - garage
-    environment:
-      GARAGE_ENDPOINT: http://garage:3900
-      GARAGE_HOST: garage
-    volumes:
-      - ./garage.toml:/etc/garage.toml
-      - garage_data:/mnt/data
-    restart: "no"
-    networks:
-      - person2-net
+  # garage-init disabled — manual setup only (key/bucket handled via exec)
+  # garage-init:
+  #   build:
+  #     context: ./storage/garage
+  #     dockerfile: Dockerfile
+  #   container_name: person2-garage-init
+  #   depends_on:
+  #     - garage
+  #   environment:
+  #     GARAGE_ENDPOINT: http://garage:3900
+  #     GARAGE_HOST: garage
+  #   volumes:
+  #     - ./garage.toml:/etc/garage.toml
+  #     - garage_data:/mnt/data
+  #   restart: "no"
+  #   networks:
+  #     - person2-net
 
   garage-webui:
     image: khairul169/garage-webui:latest
@@ -103,9 +105,9 @@ services:
       AUTH_USER_PASS: 'admin:$2y$10$7o8xlJPWHvdSCDXVefF5M.zUPoKI/C0l6meAwvOvdRxnRy.m5E/pC'
     networks:
       - person2-net
-
 volumes:
   garage_data:
+  ivy_cache:
 
 networks:
   person2-net:

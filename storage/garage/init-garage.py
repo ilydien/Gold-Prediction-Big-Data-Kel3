@@ -82,6 +82,15 @@ def ensure_layout():
         print(f"Layout already configured (version {version}).")
 
 
+def get_admin_token():
+    with open(GARAGE_CONFIG) as f:
+        for line in f:
+            line = line.strip()
+            if line.startswith("admin_token "):
+                return line.split("=", 1)[1].strip().strip('"\'')
+    return None
+
+
 def create_key():
     global ACCESS_KEY_ID, SECRET_KEY
 
@@ -93,17 +102,30 @@ def create_key():
             break
 
     if ACCESS_KEY_ID:
-        output = gar("key", "info", ACCESS_KEY_ID)
-        for line in output.splitlines():
-            stripped = line.strip()
-            if stripped.startswith("Secret key:"):
-                SECRET_KEY = stripped.split(":", 1)[1].strip()
-        if ACCESS_KEY_ID and SECRET_KEY:
+        token = get_admin_token()
+        if token:
+            import urllib.request
+            req = urllib.request.Request(
+                f"http://{GARAGE_HOST}:3903/v1/key?id={ACCESS_KEY_ID}",
+                method="GET",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+            try:
+                resp = urllib.request.urlopen(req, timeout=5)
+                data = json.loads(resp.read().decode())
+                SECRET_KEY = data.get("secretKey", "")
+            except Exception as e:
+                print(f"Warning: Admin API failed ({e})")
+
+        if SECRET_KEY and SECRET_KEY != "(redacted)":
             gar("key", "allow", "--create-bucket", ACCESS_KEY_ID)
             print(f"Reusing existing key '{KEY_NAME}' — AK: {ACCESS_KEY_ID}")
             return
-        print(f"Found key ID {ACCESS_KEY_ID} but could not get secret key from info")
-        exit(1)
+
+        print(f"Secret key unavailable for {ACCESS_KEY_ID}, recreating key...")
+        gar("key", "delete", "--yes", ACCESS_KEY_ID)
+        ACCESS_KEY_ID = None
+        SECRET_KEY = None
 
     output = gar("key", "create", KEY_NAME)
     for line in output.splitlines():
@@ -143,14 +165,6 @@ def create_buckets():
         config=boto3.session.Config(signature_version="s3v4"),
     )
 
-    existing_ids = set()
-    out = gar("bucket", "list")
-    for line in out.splitlines():
-        if f"{ACCESS_KEY_ID}:" in line:
-            parts = line.strip().split()
-            if len(parts) >= 2:
-                existing_ids.add(parts[0])
-
     for bucket in BUCKETS:
         gid = get_bucket_global_id(bucket)
         if gid:
@@ -162,6 +176,12 @@ def create_buckets():
         if gid:
             gar("bucket", "allow", "--read", "--write", "--owner", "--key", ACCESS_KEY_ID, gid)
             print(f"Granted read/write/owner on '{bucket}' to key {ACCESS_KEY_ID}")
+            # Add global alias so WebUI can sort buckets (aliases[0] defined)
+            try:
+                gar("bucket", "alias", gid, bucket)
+                print(f"Set global alias '{bucket}' for bucket {gid}")
+            except RuntimeError as e:
+                print(f"Global alias may already exist: {e}")
         else:
             print(f"Warning: could not find global ID for bucket '{bucket}'")
 

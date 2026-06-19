@@ -92,8 +92,7 @@ services:
       GARAGE_ENDPOINT: http://garage:3900
       GARAGE_ACCESS_KEY: ${GARAGE_ACCESS_KEY}
       GARAGE_SECRET_KEY: ${GARAGE_SECRET_KEY}
-      FASTAPI_URL: http://fastapi:8000/predict
-      PROCESSING_INTERVAL: "10"
+      PROCESSING_INTERVAL: "1"
     restart: unless-stopped
     networks:
       - gold-network
@@ -118,8 +117,8 @@ services:
 
   garage-init:
     build:
-      context: .
-      dockerfile: storage/garage/Dockerfile
+      context: ./storage/garage
+      dockerfile: Dockerfile
     container_name: garage-init
     depends_on:
       - garage

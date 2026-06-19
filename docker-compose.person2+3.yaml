@@ -62,8 +62,7 @@ services:
       GARAGE_ENDPOINT: http://garage:3900
       GARAGE_ACCESS_KEY: ${GARAGE_ACCESS_KEY}
       GARAGE_SECRET_KEY: ${GARAGE_SECRET_KEY}
-      FASTAPI_URL: ${FASTAPI_URL}
-      PROCESSING_INTERVAL: "10"
+      PROCESSING_INTERVAL: "1"
     restart: unless-stopped
     networks:
       - hybrid-net
@@ -87,8 +86,8 @@ services:
 
   garage-init:
     build:
-      context: .
-      dockerfile: storage/garage/Dockerfile
+      context: ./storage/garage
+      dockerfile: Dockerfile
     container_name: person2-garage-init
     depends_on:
       - garage
