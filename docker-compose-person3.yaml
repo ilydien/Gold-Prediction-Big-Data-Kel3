@@ -63,6 +63,12 @@ services:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       MLFLOW_TRACKING_URI: http://mlflow:5000
+<<<<<<< HEAD
+=======
+      DATA_SOURCE: ${DATA_SOURCE:-yfinance}
+      PREDICTION_HORIZONS: ${PREDICTION_HORIZONS:-12,24,48,72,168,720}
+      YF_PERIOD: ${YF_PERIOD:-730d}
+>>>>>>> 09f4d05 (feat: multi-horizon forecasting with yfinance data source (25 features, 6 horizons))
       RETRAIN_COUNT_THRESHOLD: ${RETRAIN_COUNT_THRESHOLD:-2000}
       RETRAIN_PERF_WINDOW: ${RETRAIN_PERF_WINDOW:-100}
       RETRAIN_PERF_FACTOR: ${RETRAIN_PERF_FACTOR:-1.5}

@@ -10,6 +10,10 @@ from shared.features import FEATURE_COLUMNS, TARGET_COLUMN, compute_features
 GARAGE_ENDPOINT = os.getenv("GARAGE_ENDPOINT", "http://localhost:3900")
 GARAGE_ACCESS_KEY = os.getenv("GARAGE_ACCESS_KEY", "")
 GARAGE_SECRET_KEY = os.getenv("GARAGE_SECRET_KEY", "")
+<<<<<<< HEAD
+=======
+DATA_SOURCE = os.getenv("DATA_SOURCE", "garage").lower()
+>>>>>>> 09f4d05 (feat: multi-horizon forecasting with yfinance data source (25 features, 6 horizons))
 MAX_RETRIES = int(os.getenv("GARAGE_RETRIES", "3"))
 RETRY_DELAY = int(os.getenv("GARAGE_RETRY_DELAY", "5"))
 
@@ -68,13 +72,61 @@ def write_parquet_to_garage(df: pd.DataFrame, bucket: str, prefix: str):
     print(f"Wrote {len(df)} rows to {bucket}/{key}")
 
 
+def aggregate_to_hourly(df: pd.DataFrame) -> pd.DataFrame:
+    print(f"  Aggregating {len(df)} rows (5-second) to hourly...")
+    df["hour"] = pd.to_datetime(df["timestamp"]).dt.floor("1h")
+    hourly = df.groupby("hour").agg({
+        "gold_price": "last",
+        "oil_price": "last",
+        "dxy": "last",
+        "eurusd": "last",
+        "jpy": "last",
+    }).reset_index()
+    hourly = hourly.rename(columns={"hour": "timestamp"})
+    hourly["timestamp"] = hourly["timestamp"].astype(str)
+    print(f"  Hourly aggregation: {len(hourly)} rows")
+    return hourly
+
+
 def run_feature_pipeline():
-    print("Reading processed data from Garage...")
-    processed_files = list_parquet_files("processed-data")
-    if not processed_files:
-        print("No processed data found")
+    print(f"Feature pipeline — data source: {DATA_SOURCE}")
+
+    if DATA_SOURCE == "yfinance":
+        from storage.trainer.fetch_data import fetch_yfinance
+
+        df = fetch_yfinance()
+        print(f"Loaded {len(df)} rows from yfinance")
+
+    elif DATA_SOURCE == "garage":
+        print("Reading processed data from Garage...")
+        processed_files = list_parquet_files("processed-data")
+        if not processed_files:
+            print("No processed data found, trying hourly-history...")
+            processed_files = list_parquet_files("hourly-history")
+
+        if not processed_files:
+            print("No data found in any Garage bucket")
+            return
+
+        all_data = []
+        for f in processed_files:
+            print(f"  Downloading: {f}")
+            df = read_parquet_from_garage("processed-data" if "processed-data" in f else "hourly-history", f)
+            all_data.append(df)
+
+        combined = pd.concat(all_data, ignore_index=True)
+        print(f"Loaded {len(combined)} rows from {len(processed_files)} files")
+
+        if DATA_SOURCE == "garage" and "processed-data" not in str(processed_files[0]).lower():
+            df = combined
+        else:
+            bucket_name = "processed-data" if "processed-data" in str(processed_files[0]) else "hourly-history"
+            df = aggregate_to_hourly(combined)
+    else:
+        print(f"Unknown DATA_SOURCE: {DATA_SOURCE}")
         return
 
+<<<<<<< HEAD
     all_data = []
     for f in processed_files:
         print(f"  Downloading: {f}")
@@ -85,6 +137,9 @@ def run_feature_pipeline():
     print(f"Loaded {len(combined)} rows from {len(processed_files)} files")
 
     features = compute_features(combined)
+=======
+    features = compute_features(df)
+>>>>>>> 09f4d05 (feat: multi-horizon forecasting with yfinance data source (25 features, 6 horizons))
     features_clean = features.dropna(subset=FEATURE_COLUMNS).reset_index(drop=True)
     print(f"Computed features: {len(features_clean)} rows")
 

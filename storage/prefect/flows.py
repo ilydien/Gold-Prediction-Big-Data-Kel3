@@ -32,7 +32,15 @@ def gold_pipeline():
     global _start_time
     _start_time = time.time()
 
+<<<<<<< HEAD
     from storage.trainer.retraining import should_retrain, save_training_state, build_training_state
+=======
+    from storage.trainer.retraining import (
+        should_retrain,
+        save_training_state,
+        build_training_state,
+    )
+>>>>>>> 09f4d05 (feat: multi-horizon forecasting with yfinance data source (25 features, 6 horizons))
 
     do_retrain, reason, object_count = should_retrain()
 
@@ -57,14 +65,27 @@ def gold_pipeline():
         raise
 
     try:
+<<<<<<< HEAD
         metadata = run_ml_training()
         print(f"[OK] Training complete — best model: {metadata['model_name']}")
+=======
+        all_metadata = run_ml_training()
+        trained = list(all_metadata.keys()) if all_metadata else []
+        print(f"[OK] Training complete — horizons: {trained}")
+>>>>>>> 09f4d05 (feat: multi-horizon forecasting with yfinance data source (25 features, 6 horizons))
     except Exception as e:
         print(f"[FAIL] ML training failed: {e}")
         raise
 
+<<<<<<< HEAD
     state = build_training_state(metadata, object_count)
     save_training_state(state)
+=======
+    if all_metadata:
+        for horizon, meta in all_metadata.items():
+            state = build_training_state(meta, object_count)
+            save_training_state(state, horizon)
+>>>>>>> 09f4d05 (feat: multi-horizon forecasting with yfinance data source (25 features, 6 horizons))
 
     elapsed = time.time() - _start_time
     print(f"\n{'='*50}")

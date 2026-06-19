@@ -4,6 +4,7 @@ import os
 import numpy as np
 import pytest
 from sklearn.dummy import DummyRegressor
+<<<<<<< HEAD
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 
 FEATURE_COUNT = 12
@@ -42,6 +43,20 @@ def _make_dummy_pipeline():
     from sklearn.preprocessing import StandardScaler
     from sklearn.linear_model import LinearRegression
 
+=======
+from sklearn.linear_model import LinearRegression
+from sklearn.metrics import mean_absolute_error, r2_score
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import StandardScaler
+
+from shared.features import FEATURE_COLUMNS, FEATURE_COUNT, TARGET_COLUMN
+
+SAMPLE_DATA = np.random.RandomState(42).randn(100, FEATURE_COUNT)
+SAMPLE_TARGET = SAMPLE_DATA[:, 0] * 10 + SAMPLE_DATA[:, 10] * 3 + np.random.randn(100) * 5
+
+
+def _make_dummy_pipeline():
+>>>>>>> 09f4d05 (feat: multi-horizon forecasting with yfinance data source (25 features, 6 horizons))
     return Pipeline([
         ("scaler", StandardScaler()),
         ("lr", LinearRegression()),
@@ -49,6 +64,7 @@ def _make_dummy_pipeline():
 
 
 class TestModelSanity:
+<<<<<<< HEAD
     """Sanity checks — basic behavioral validation."""
 
     def test_prediction_not_negative(self):
@@ -60,20 +76,34 @@ class TestModelSanity:
         model = _make_dummy_pipeline()
         preds = model.predict(SAMPLE_DATA)
         assert np.all(np.isfinite(preds)), "Model produced NaN or Inf predictions"
+=======
+    def test_prediction_is_finite(self):
+        model = _make_dummy_pipeline()
+        preds = model.predict(SAMPLE_DATA)
+        assert np.all(np.isfinite(preds)), "Model produced NaN or Inf"
+>>>>>>> 09f4d05 (feat: multi-horizon forecasting with yfinance data source (25 features, 6 horizons))
 
     def test_single_prediction_returns_float(self):
         model = _make_dummy_pipeline()
         pred = model.predict(SAMPLE_DATA[:1])
+<<<<<<< HEAD
         assert isinstance(pred[0], (float, np.floating)), "Single prediction is not a float"
 
 
 class TestModelAgainstNaive:
     """Model must outperform a naive baseline (predict yesterday's price)."""
 
+=======
+        assert isinstance(pred[0], (float, np.floating))
+
+
+class TestModelAgainstNaive:
+>>>>>>> 09f4d05 (feat: multi-horizon forecasting with yfinance data source (25 features, 6 horizons))
     def test_mae_beats_naive(self):
         model = _make_dummy_pipeline()
         naive = DummyRegressor(strategy="constant", constant=SAMPLE_TARGET.mean())
         naive.fit(SAMPLE_DATA, SAMPLE_TARGET)
+<<<<<<< HEAD
 
         model_mae = mean_absolute_error(SAMPLE_TARGET, model.predict(SAMPLE_DATA))
         naive_mae = mean_absolute_error(SAMPLE_TARGET, naive.predict(SAMPLE_DATA))
@@ -81,11 +111,17 @@ class TestModelAgainstNaive:
         assert model_mae <= naive_mae, (
             f"Model MAE ({model_mae:.4f}) worse than naive ({naive_mae:.4f})"
         )
+=======
+        model_mae = mean_absolute_error(SAMPLE_TARGET, model.predict(SAMPLE_DATA))
+        naive_mae = mean_absolute_error(SAMPLE_TARGET, naive.predict(SAMPLE_DATA))
+        assert model_mae <= naive_mae, f"MAE {model_mae:.2f} > naive {naive_mae:.2f}"
+>>>>>>> 09f4d05 (feat: multi-horizon forecasting with yfinance data source (25 features, 6 horizons))
 
     def test_r2_beats_naive(self):
         model = _make_dummy_pipeline()
         naive = DummyRegressor(strategy="mean")
         naive.fit(SAMPLE_DATA, SAMPLE_TARGET)
+<<<<<<< HEAD
 
         model_r2 = r2_score(SAMPLE_TARGET, model.predict(SAMPLE_DATA))
         naive_r2 = r2_score(SAMPLE_TARGET, naive.predict(SAMPLE_DATA))
@@ -98,6 +134,14 @@ class TestModelAgainstNaive:
 class TestModelShape:
     """Model input/output shape validation."""
 
+=======
+        model_r2 = r2_score(SAMPLE_TARGET, model.predict(SAMPLE_DATA))
+        naive_r2 = r2_score(SAMPLE_TARGET, naive.predict(SAMPLE_DATA))
+        assert model_r2 >= naive_r2, f"R² {model_r2:.2f} < naive {naive_r2:.2f}"
+
+
+class TestModelShape:
+>>>>>>> 09f4d05 (feat: multi-horizon forecasting with yfinance data source (25 features, 6 horizons))
     def test_accepts_correct_feature_count(self):
         model = _make_dummy_pipeline()
         model.predict(SAMPLE_DATA)
@@ -110,6 +154,7 @@ class TestModelShape:
             model.predict(wrong_shape)
 
 
+<<<<<<< HEAD
 class TestModelRange:
     """Prediction magnitude checks."""
 
@@ -144,3 +189,16 @@ class TestFeatureCount:
         assert TARGET_COLUMN == "gold_price", (
             f"Expected target 'gold_price', got '{TARGET_COLUMN}'"
         )
+=======
+class TestFeatureConfig:
+    def test_feature_count(self):
+        assert len(FEATURE_COLUMNS) == FEATURE_COUNT, \
+            f"Expected {FEATURE_COUNT} features, got {len(FEATURE_COLUMNS)}"
+
+    def test_target_column(self):
+        assert TARGET_COLUMN == "gold_price"
+
+    def test_all_features_numeric(self):
+        sample = _make_dummy_pipeline().predict(SAMPLE_DATA[:1])[0]
+        assert isinstance(sample, (float, np.floating))
+>>>>>>> 09f4d05 (feat: multi-horizon forecasting with yfinance data source (25 features, 6 horizons))

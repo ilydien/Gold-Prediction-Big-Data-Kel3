@@ -35,7 +35,10 @@ if __name__ == "__main__":
     deployment_id = deployment.apply()
     print(f"Deployment registered: gold-training-daily (id={deployment_id})")
 
+<<<<<<< HEAD
     # Fix: set path to /app so worker subprocess can find flow code
+=======
+>>>>>>> 09f4d05 (feat: multi-horizon forecasting with yfinance data source (25 features, 6 horizons))
     from prefect.client.orchestration import PrefectClient
     from prefect.client.schemas.actions import DeploymentUpdate
     client = PrefectClient(api=os.environ["PREFECT_API_URL"])

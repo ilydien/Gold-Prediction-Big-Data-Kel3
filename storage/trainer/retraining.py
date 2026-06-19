@@ -17,9 +17,17 @@ POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD", "postgres")
 COUNT_THRESHOLD = int(os.getenv("RETRAIN_COUNT_THRESHOLD", "2000"))
 PERF_WINDOW = int(os.getenv("RETRAIN_PERF_WINDOW", "100"))
 PERF_FACTOR = float(os.getenv("RETRAIN_PERF_FACTOR", "1.5"))
+<<<<<<< HEAD
 
 STATE_BUCKET = "models"
 STATE_KEY = "training-state/latest.json"
+=======
+PREDICTION_HORIZONS = [
+    int(h) for h in os.getenv("PREDICTION_HORIZONS", "12,24,48,72,168,720").split(",")
+]
+
+STATE_BUCKET = "models"
+>>>>>>> 09f4d05 (feat: multi-horizon forecasting with yfinance data source (25 features, 6 horizons))
 
 
 def _get_s3():
@@ -36,6 +44,7 @@ def _get_s3():
 
 def _get_pg():
     return psycopg2.connect(
+<<<<<<< HEAD
         host=POSTGRES_HOST,
         port=POSTGRES_PORT,
         dbname=POSTGRES_DB,
@@ -48,11 +57,24 @@ def load_training_state() -> dict:
     try:
         s3 = _get_s3()
         resp = s3.get_object(Bucket=STATE_BUCKET, Key=STATE_KEY)
+=======
+        host=POSTGRES_HOST, port=POSTGRES_PORT, dbname=POSTGRES_DB,
+        user=POSTGRES_USER, password=POSTGRES_PASSWORD,
+    )
+
+
+def load_training_state(horizon: int = None) -> dict:
+    key = f"training-state/h={horizon}/latest.json" if horizon else "training-state/latest.json"
+    try:
+        s3 = _get_s3()
+        resp = s3.get_object(Bucket=STATE_BUCKET, Key=key)
+>>>>>>> 09f4d05 (feat: multi-horizon forecasting with yfinance data source (25 features, 6 horizons))
         return json.loads(resp["Body"].read().decode())
     except Exception:
         return {}
 
 
+<<<<<<< HEAD
 def save_training_state(state: dict):
     try:
         s3 = _get_s3()
@@ -62,6 +84,14 @@ def save_training_state(state: dict):
             Body=json.dumps(state, indent=2).encode(),
         )
         print(f"Training state saved to {STATE_BUCKET}/{STATE_KEY}")
+=======
+def save_training_state(state: dict, horizon: int):
+    key = f"training-state/h={horizon}/latest.json"
+    try:
+        s3 = _get_s3()
+        s3.put_object(Bucket=STATE_BUCKET, Key=key, Body=json.dumps(state, indent=2).encode())
+        print(f"Training state saved to {STATE_BUCKET}/{key}")
+>>>>>>> 09f4d05 (feat: multi-horizon forecasting with yfinance data source (25 features, 6 horizons))
     except Exception as e:
         print(f"Failed to save training state: {e}")
 
@@ -77,7 +107,11 @@ def _count_objects(bucket: str) -> int:
 
 def check_count_trigger(last_state: dict) -> tuple[bool, int]:
     prev_count = last_state.get("object_count", 0)
+<<<<<<< HEAD
     curr_count = _count_objects("processed-data")
+=======
+    curr_count = _count_objects("processed-data") + _count_objects("hourly-history")
+>>>>>>> 09f4d05 (feat: multi-horizon forecasting with yfinance data source (25 features, 6 horizons))
     new_objects = curr_count - prev_count
     if new_objects >= COUNT_THRESHOLD:
         return True, new_objects
@@ -88,7 +122,10 @@ def check_performance_trigger(last_state: dict) -> tuple[bool, float]:
     best_mae = last_state.get("best_mae")
     if best_mae is None:
         return False, 0.0
+<<<<<<< HEAD
 
+=======
+>>>>>>> 09f4d05 (feat: multi-horizon forecasting with yfinance data source (25 features, 6 horizons))
     try:
         conn = _get_pg()
         cur = conn.cursor()
@@ -108,7 +145,10 @@ def check_performance_trigger(last_state: dict) -> tuple[bool, float]:
         row = cur.fetchone()
         cur.close()
         conn.close()
+<<<<<<< HEAD
 
+=======
+>>>>>>> 09f4d05 (feat: multi-horizon forecasting with yfinance data source (25 features, 6 horizons))
         if row and row[0] is not None:
             rolling_mae = float(row[0])
             if rolling_mae > PERF_FACTOR * best_mae:
@@ -116,11 +156,15 @@ def check_performance_trigger(last_state: dict) -> tuple[bool, float]:
             return False, rolling_mae
     except Exception as e:
         print(f"Performance check failed: {e}")
+<<<<<<< HEAD
 
+=======
+>>>>>>> 09f4d05 (feat: multi-horizon forecasting with yfinance data source (25 features, 6 horizons))
     return False, 0.0
 
 
 def should_retrain() -> tuple[bool, str, int]:
+<<<<<<< HEAD
     last_state = load_training_state()
 
     if not last_state:
@@ -147,6 +191,33 @@ def should_retrain() -> tuple[bool, str, int]:
         f"No trigger: {new_objects} new objects, "
         f"best MAE={last_state.get('best_mae', 'N/A')}"
     ), new_objects
+=======
+    any_dirty = False
+    reasons = []
+
+    for h in PREDICTION_HORIZONS:
+        last_state = load_training_state(h)
+
+        if not last_state:
+            any_dirty = True
+            reasons.append(f"h={h}: no previous state")
+            continue
+
+        if last_state.get("best_mae", 0) <= 0:
+            any_dirty = True
+            reasons.append(f"h={h}: invalid state (MAE=0)")
+            continue
+
+    new_objects = _count_objects("processed-data") + _count_objects("hourly-history")
+    triggered_count, _ = check_count_trigger(load_training_state(PREDICTION_HORIZONS[0]) or {})
+
+    if triggered_count:
+        return True, f"Count trigger: {new_objects} new objects", new_objects
+    if any_dirty:
+        return True, "Invalid or missing training state: " + "; ".join(reasons), new_objects
+
+    return False, f"No trigger: {new_objects} new objects", new_objects
+>>>>>>> 09f4d05 (feat: multi-horizon forecasting with yfinance data source (25 features, 6 horizons))
 
 
 def build_training_state(metadata: dict, object_count: int) -> dict:
@@ -156,4 +227,8 @@ def build_training_state(metadata: dict, object_count: int) -> dict:
         "object_count": object_count,
         "best_mae": metadata["mae"],
         "best_model": metadata["model_name"],
+<<<<<<< HEAD
+=======
+        "horizon": metadata.get("horizon"),
+>>>>>>> 09f4d05 (feat: multi-horizon forecasting with yfinance data source (25 features, 6 horizons))
     }
