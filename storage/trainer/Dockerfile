@@ -3,11 +3,7 @@ FROM python:3.12-slim
 WORKDIR /app
 
 RUN pip install --no-cache-dir --timeout 120 -i https://pypi.tuna.tsinghua.edu.cn/simple \
-<<<<<<< HEAD
-    pandas numpy scikit-learn joblib boto3 psycopg2-binary prefect mlflow
-=======
     pandas numpy scikit-learn joblib boto3 psycopg2-binary prefect mlflow yfinance
->>>>>>> 09f4d05 (feat: multi-horizon forecasting with yfinance data source (25 features, 6 horizons))
 
 COPY shared/ /app/shared/
 COPY storage/features/ /app/storage/features/
