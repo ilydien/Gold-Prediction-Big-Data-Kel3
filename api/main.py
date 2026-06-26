@@ -2,6 +2,9 @@ import io
 import json
 import logging
 import os
+import concurrent.futures
+import threading
+import time
 from datetime import datetime, timezone
 
 import boto3
@@ -38,8 +41,11 @@ engine = create_engine(DATABASE_URL)
 
 app = FastAPI(title="Gold Price Prediction API — Multi-Horizon")
 
+
 _models = {}
 _champions = {}
+_history_buffer = pd.DataFrame()
+_processed_keys = set()
 
 
 class PredictRequest(BaseModel):
@@ -128,6 +134,70 @@ def _get_latest_price_from_garage() -> dict:
         return None
 
 
+def _list_parquet_keys(bucket: str = "processed-data") -> list:
+    s3 = _get_s3()
+    paginator = s3.get_paginator("list_objects_v2")
+    keys = []
+    for page in paginator.paginate(Bucket=bucket):
+        for obj in page.get("Contents", []):
+            if obj["Key"].endswith(".parquet"):
+                keys.append(obj["Key"])
+    return keys
+
+
+def _load_one_parquet(bucket: str, key: str) -> pd.DataFrame:
+    s3 = _get_s3()
+    resp = s3.get_object(Bucket=bucket, Key=key)
+    return pd.read_parquet(io.BytesIO(resp["Body"].read()))
+
+
+def _load_parquet_batch(keys: list[str], bucket: str = "processed-data", max_workers: int = 10) -> pd.DataFrame:
+    if not keys:
+        return pd.DataFrame()
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as ex:
+        futures = {ex.submit(_load_one_parquet, bucket, k): k for k in keys}
+        dfs = []
+        for f in concurrent.futures.as_completed(futures):
+            try:
+                dfs.append(f.result())
+            except Exception as e:
+                log.warning(f"Failed to load {futures[f]}: {e}")
+    return pd.concat(dfs, ignore_index=True) if dfs else pd.DataFrame()
+
+
+def _rebuild_history() -> pd.DataFrame:
+    global _processed_keys
+    log.info("Loading initial history from Garage...")
+    all_keys = sorted(_list_parquet_keys())
+    if not all_keys:
+        log.warning("No parquet files in Garage")
+        return pd.DataFrame()
+
+    all_keys = sorted(all_keys)
+    load_keys = all_keys[-200:]
+    df = _load_parquet_batch(load_keys)
+    _processed_keys = set(all_keys)
+    df = df.drop_duplicates(subset=["timestamp"]).sort_values("timestamp").reset_index(drop=True)
+    log.info(f"Loaded {len(df)} historical rows from Garage ({len(all_keys)} total keys tracked)")
+    return df
+
+
+def _check_new_data() -> pd.DataFrame:
+    global _processed_keys
+    try:
+        all_keys = set(_list_parquet_keys())
+        new_keys = sorted(all_keys - _processed_keys)
+        if not new_keys:
+            return pd.DataFrame()
+        df = _load_parquet_batch(new_keys)
+        _processed_keys.update(new_keys)
+        log.info(f"Added {len(df)} new rows from Garage")
+        return df
+    except Exception as e:
+        log.warning(f"Check new data failed: {e}")
+        return pd.DataFrame()
+
+
 def load_models():
     global _models, _champions
     s3 = _get_s3()
@@ -146,9 +216,73 @@ def load_models():
             log.warning(f"Model h={h} not found: {e}")
 
 
+def _predict_and_save(latest_row: dict):
+    global _history_buffer
+    if _history_buffer.empty or len(_history_buffer) < 168:
+        return
+
+    try:
+        buf = _history_buffer.copy()
+        buf["timestamp"] = buf["timestamp"].astype(str)
+        feature_dict = get_feature_vector(buf, latest_row)
+    except Exception as e:
+        log.warning(f"Feature computation failed: {e}")
+        return
+
+    feature_values = np.array([feature_dict.get(c, 0.0) for c in FEATURE_COLUMNS]).reshape(1, -1)
+    ts = datetime.now(timezone.utc).isoformat()
+    log.info(f"Predicting at {ts} — {len(_history_buffer)} history rows")
+
+    actual_price = latest_row.get("gold_price")
+    for h in PREDICTION_HORIZONS:
+        if h not in _models:
+            continue
+        try:
+            pred = float(_models[h].predict(feature_values)[0])
+            model_name = _champions.get(h, {}).get("model_name", "unknown")
+            with engine.connect() as conn:
+                conn.execute(
+                    text("INSERT INTO predictions (timestamp, predicted_price, actual_price, horizon, model_version) "
+                         "VALUES (:ts, :price, :actual, :h, :version)"),
+                    {"ts": ts, "price": pred, "actual": actual_price, "h": h, "version": model_name},
+                )
+                conn.commit()
+        except Exception as e:
+            log.error(f"Predict/insert failed h={h}: {e}")
+
+
+def _polling_loop():
+    global _history_buffer
+    log.info("Background polling started (interval=1s)")
+
+    _history_buffer = _rebuild_history()
+    last_refresh = time.time()
+
+    while True:
+        try:
+            if time.time() - last_refresh > 60:
+                new_data = _check_new_data()
+                if new_data is not None and not new_data.empty:
+                    _history_buffer = pd.concat([_history_buffer, new_data], ignore_index=True)
+                    _history_buffer = _history_buffer.drop_duplicates(subset=["timestamp"]).sort_values("timestamp")
+                    if len(_history_buffer) > 1000:
+                        _history_buffer = _history_buffer.tail(500)
+                last_refresh = time.time()
+
+            latest = _get_latest_price_from_garage()
+            if latest is not None and not _history_buffer.empty:
+                _predict_and_save(latest)
+        except Exception as e:
+            log.error(f"Polling error: {e}")
+        time.sleep(1)
+
+
 @app.on_event("startup")
 def startup():
     load_models()
+    t = threading.Thread(target=_polling_loop, daemon=True)
+    t.start()
+    log.info(f"Background polling started — {len(_models)} models loaded")
 
 
 @app.get("/")
@@ -183,12 +317,13 @@ def predict(req: PredictRequest):
     ts = datetime.now(timezone.utc).isoformat()
     model_name = _champions.get(horizon, {}).get("model_name", "unknown")
 
+    actual_price = latest_row.get("gold_price")
     try:
         with engine.connect() as conn:
             conn.execute(
-                text("INSERT INTO predictions (timestamp, predicted_price, horizon, model_version) "
-                     "VALUES (:ts, :price, :horizon, :version)"),
-                {"ts": ts, "price": pred, "horizon": horizon, "version": model_name},
+                text("INSERT INTO predictions (timestamp, predicted_price, actual_price, horizon, model_version) "
+                     "VALUES (:ts, :price, :actual, :horizon, :version)"),
+                {"ts": ts, "price": pred, "actual": actual_price, "horizon": horizon, "version": model_name},
             )
             conn.commit()
     except Exception as e:
@@ -215,6 +350,7 @@ def predict_all():
         raise HTTPException(status_code=500, detail=f"Feature error: {e}")
 
     feature_values = np.array([feature_dict.get(c, 0.0) for c in FEATURE_COLUMNS]).reshape(1, -1)
+    actual_price = latest_row.get("gold_price")
     ts = datetime.now(timezone.utc).isoformat()
     predictions = []
 
@@ -227,9 +363,9 @@ def predict_all():
         try:
             with engine.connect() as conn:
                 conn.execute(
-                    text("INSERT INTO predictions (timestamp, predicted_price, horizon, model_version) "
-                         "VALUES (:ts, :price, :horizon, :version)"),
-                    {"ts": ts, "price": pred, "horizon": h, "version": model_name},
+                    text("INSERT INTO predictions (timestamp, predicted_price, actual_price, horizon, model_version) "
+                         "VALUES (:ts, :price, :actual, :horizon, :version)"),
+                    {"ts": ts, "price": pred, "actual": actual_price, "horizon": h, "version": model_name},
                 )
                 conn.commit()
         except Exception as e:
@@ -243,6 +379,29 @@ def predict_all():
         ))
 
     return PredictAllResponse(timestamp=ts, predictions=predictions)
+
+
+@app.get("/market/latest")
+def get_market_latest():
+    data = _get_latest_price_from_garage()
+    if data is None:
+        try:
+            df = _fetch_yfinance_history()
+            if not df.empty:
+                last = df.iloc[-1]
+                data = {
+                    "timestamp": str(last.get("timestamp", "")),
+                    "gold_price": float(last["gold_price"]),
+                    "oil_price": float(last.get("oil_price", 0)),
+                    "dxy": float(last.get("dxy", 0)),
+                    "eurusd": float(last.get("eurusd", 0)),
+                    "jpy": float(last.get("jpy", 0)),
+                }
+        except Exception as e:
+            raise HTTPException(status_code=503, detail=f"Market data unavailable: {e}")
+    if data is None:
+        raise HTTPException(status_code=503, detail="No market data available")
+    return data
 
 
 @app.get("/predictions")

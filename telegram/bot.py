@@ -1,9 +1,12 @@
 import logging
 import os
 import time
+from datetime import timezone, timedelta
 
 import psycopg2
 import requests
+
+WIB = timezone(timedelta(hours=7))
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
@@ -18,7 +21,7 @@ POSTGRES_DB = os.getenv("POSTGRES_DB", "gold_prediction")
 POSTGRES_USER = os.getenv("POSTGRES_USER", "postgres")
 POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD", "postgres")
 
-CHECK_INTERVAL = int(os.getenv("CHECK_INTERVAL", "30"))
+CHECK_INTERVAL = int(os.getenv("CHECK_INTERVAL", "1"))
 PRICE_THRESHOLD = float(os.getenv("PRICE_THRESHOLD", "10.0"))
 
 
@@ -39,7 +42,7 @@ def send_telegram(message: str):
     try:
         resp = requests.post(
             TELEGRAM_API,
-            json={"chat_id": TELEGRAM_CHAT_ID, "text": message, "parse_mode": "Markdown"},
+            json={"chat_id": TELEGRAM_CHAT_ID, "text": message},
             timeout=10,
         )
         if resp.ok:
@@ -50,20 +53,29 @@ def send_telegram(message: str):
         log.error(f"Telegram send failed: {e}")
 
 
+_last_prediction_id = None
+
+
 def check_and_alert():
+    global _last_prediction_id
     try:
         conn = pg_connect()
         cur = conn.cursor()
 
         cur.execute(
-            "SELECT timestamp, predicted_price, model_version "
+            "SELECT id, timestamp, predicted_price, model_version "
             "FROM predictions ORDER BY timestamp DESC LIMIT 1"
         )
         row = cur.fetchone()
         if not row:
             return
 
-        ts, predicted_price, model_version = row
+        pred_id, ts, predicted_price, model_version = row
+
+        if pred_id == _last_prediction_id:
+            return
+
+        _last_prediction_id = pred_id
 
         cur.execute(
             "SELECT timestamp, predicted_price "
@@ -74,9 +86,10 @@ def check_and_alert():
         cur.close()
         conn.close()
 
+        ts_wib = ts.replace(tzinfo=timezone.utc).astimezone(WIB)
         msg = (
             f"💰 *Gold Price Alert*\n"
-            f"Time: {ts}\n"
+            f"Time: {ts_wib.strftime('%Y-%m-%d %H:%M:%S WIB')}\n"
             f"Predicted: ${predicted_price:.2f}\n"
             f"Model: {model_version}"
         )
