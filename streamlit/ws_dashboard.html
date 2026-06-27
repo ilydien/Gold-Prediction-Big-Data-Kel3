@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:"Source Sans Pro",sans-serif;background:#0e1117;color:#fafafa;padding:20px}
+h1{font-size:1.8rem;margin-bottom:10px}
+h3{font-size:0.75rem;text-transform:uppercase;color:#aaa;margin-bottom:8px;margin-top:16px}
+hr{border-color:#262730;margin:16px 0}
+.cards{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:8px}
+.card{flex:1;min-width:120px;background:#1a1c23;border:1px solid #262730;border-radius:8px;padding:12px 14px}
+.card-label{font-size:0.7rem;color:#888}
+.card-value{font-size:1.15rem;font-weight:600;color:#fafafa;margin-top:4px}
+.card-delta{font-size:0.7rem;color:#fa0;margin-top:2px}
+.tabs{display:flex;gap:4px;margin-bottom:10px}
+.tab{padding:8px 20px;border-radius:6px 6px 0 0;cursor:pointer;background:#1a1c23;border:1px solid #262730;border-bottom:none;color:#888;font-size:0.85rem}
+.tab.active{background:#262730;color:#fafafa}
+.chart-container{border:1px solid #262730;border-radius:0 8px 8px 8px;padding:10px;background:#1a1c23}
+.controls{display:flex;gap:12px;margin-bottom:8px;align-items:center}
+.controls select{background:#1a1c23;color:#fafafa;border:1px solid #262730;border-radius:4px;padding:4px 8px;font-size:0.8rem}
+.controls label{font-size:0.75rem;color:#aaa}
+.market-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:8px}
+.market-chart-card{background:#1a1c23;border:1px solid #262730;border-radius:8px;padding:8px}
+.caption{font-size:0.7rem;color:#666;text-align:center;margin-top:20px}
+#conn-status{position:fixed;top:10px;right:10px;font-size:0.7rem;padding:4px 10px;border-radius:4px}
+#conn-status.red{background:#ff4444;color:#fff}
+#conn-status.green{background:#00cc96;color:#000}
+</style>
+</head>
+<body>
+
+<h1>Gold Price Dashboard</h1>
+<span class="red" id="conn-status">Connecting...</span>
+<span style="font-size:0.7rem;color:#888;margin-left:8px" id="update-inline">—</span>
+
+<h3>Market Data</h3>
+<div class="cards">
+  <div class="card"><div class="card-label">Gold Price</div><div class="card-value" id="c-gold">—</div><div class="card-delta" id="cd-gold"></div></div>
+  <div class="card"><div class="card-label">Gold Prediction</div><div class="card-value" id="c-pred">—</div><div class="card-delta" id="cd-pred"></div></div>
+  <div class="card"><div class="card-label">DXY</div><div class="card-value" id="c-dxy">—</div><div class="card-delta" id="cd-dxy"></div></div>
+  <div class="card"><div class="card-label">EUR/USD</div><div class="card-value" id="c-eurusd">—</div><div class="card-delta" id="cd-eurusd"></div></div>
+  <div class="card"><div class="card-label">JPY</div><div class="card-value" id="c-jpy">—</div><div class="card-delta" id="cd-jpy"></div></div>
+  <div class="card"><div class="card-label">CL=F</div><div class="card-value" id="c-oil">—</div><div class="card-delta" id="cd-oil"></div></div>
+</div>
+
+<h3>Prediction per Horizon</h3>
+<div class="cards" id="horizon-cards">
+  <div class="card"><div class="card-label">1h ahead</div><div class="card-value" id="h-1">—</div><div class="card-delta" id="hd-1"></div></div>
+  <div class="card"><div class="card-label">12h ahead</div><div class="card-value" id="h-12">—</div><div class="card-delta" id="hd-12"></div></div>
+  <div class="card"><div class="card-label">24h ahead</div><div class="card-value" id="h-24">—</div><div class="card-delta" id="hd-24"></div></div>
+  <div class="card"><div class="card-label">48h ahead</div><div class="card-value" id="h-48">—</div><div class="card-delta" id="hd-48"></div></div>
+  <div class="card"><div class="card-label">72h ahead</div><div class="card-value" id="h-72">—</div><div class="card-delta" id="hd-72"></div></div>
+</div>
+
+<hr>
+
+<div class="tabs">
+  <div class="tab active" onclick="switchTab('pred')">Prediction History</div>
+  <div class="tab" onclick="switchTab('actual')">Actual vs Predicted</div>
+</div>
+
+<div class="controls" id="controls">
+  <label>Horizon:</label>
+  <select id="sel-horizon" onchange="rebuildChart()"></select>
+  <label>Lookback:</label>
+  <select id="sel-lookback" onchange="rebuildChart()">
+    <option value="all">All</option>
+    <option value="15m">15 min</option>
+    <option value="30m">30 min</option>
+    <option value="1h">1 hour</option>
+    <option value="2h">2 hours</option>
+    <option value="3h">3 hours</option>
+  </select>
+  <span style="font-size:0.7rem;color:#888" id="data-pts"></span>
+</div>
+<div class="chart-container"><div id="chart"></div></div>
+
+<h3>Market Indicators</h3>
+<div class="market-grid">
+  <div class="market-chart-card"><div id="mini-dxy" style="width:100%;height:260px"></div></div>
+  <div class="market-chart-card"><div id="mini-eurusd" style="width:100%;height:260px"></div></div>
+  <div class="market-chart-card"><div id="mini-oil" style="width:100%;height:260px"></div></div>
+  <div class="market-chart-card"><div id="mini-jpy" style="width:100%;height:260px"></div></div>
+</div>
+
+<div class="caption">Gold Prediction Dashboard | Big Data Kelompok 3</div>
+
+<script>
+const WS_URL = "ws://localhost:8000/ws";
+let activeTab = "pred";
+let lastMarket = null;
+let lastPreds = [];
+let lastGcHistory = [];
+let lastDxyHistory = [];
+let lastEurusdHistory = [];
+let lastJpyHistory = [];
+let lastOilHistory = [];
+let prevMarket = null;
+let prevPredPrice = null;
+
+// ============ UTILS ============
+
+function setDelta(deltaId, valueId, cur, prev, prefix, decimals) {
+  const el = document.getElementById(deltaId);
+  if (!el) return;
+  if (prev != null && cur != null && prev !== 0 && Math.abs(cur - prev) > 0.01) {
+    const diff = cur - prev;
+    const pct = ((diff / prev) * 100);
+    const sign = diff >= 0 ? "+" : "";
+    el.textContent = sign + prefix + Math.abs(diff).toFixed(decimals) + " (" + sign + pct.toFixed(2) + "%)";
+    el.style.color = diff >= 0 ? "#00cc96" : "#ff4d4d";
+  } else {
+    el.textContent = "";
+  }
+}
+
+function toWIB(utcStr) {
+  if (!utcStr) return "—";
+  try {
+    const d = new Date(utcStr + "Z");
+    if (isNaN(d.getTime())) return utcStr;
+    const yyyy = d.getUTCFullYear();
+    const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
+    const dd = String(d.getUTCDate()).padStart(2, "0");
+    const hh = String((d.getUTCHours() + 7) % 24).padStart(2, "0");
+    const mi = String(d.getUTCMinutes()).padStart(2, "0");
+    const ss = String(d.getUTCSeconds()).padStart(2, "0");
+    return yyyy + "-" + mm + "-" + dd + " " + hh + ":" + mi + ":" + ss;
+  } catch (e) { return utcStr; }
+}
+
+const horizonsSet = new Set();
+let horizonDefaults = false;
+function setHorizonOptions(preds) {
+  const sel = document.getElementById("sel-horizon");
+  const vals = [1, 12, 24, 48, 72];
+  const current = sel.value;
+  sel.innerHTML = "";
+  vals.forEach(v => {
+    const o = document.createElement("option");
+    o.value = v; o.textContent = v + "h"; sel.appendChild(o);
+  });
+
+  sel.value = [...sel.options].some(o => o.value === current) ? current : vals[0];
+}
+
+// ============ WEBSOCKET ============
+
+function connect() {
+  const ws = new WebSocket(WS_URL);
+  ws.onopen = () => {
+    document.getElementById("conn-status").textContent = "Live";
+    document.getElementById("conn-status").className = "green";
+  };
+  ws.onmessage = (event) => {
+    const msg = JSON.parse(event.data);
+    lastMarket = msg.market;
+    lastPreds = msg.predictions || [];
+    lastGcHistory = msg.gc_history || [];
+    lastDxyHistory = msg.dxy_history || [];
+    lastEurusdHistory = msg.eurusd_history || [];
+    lastJpyHistory = msg.jpy_history || [];
+    lastOilHistory = msg.oil_history || [];
+    updateCards(msg.market, lastPreds);
+    setHorizonOptions(lastPreds);
+    rebuildChart();
+    renderMarketCharts();
+  };
+  ws.onclose = () => {
+    document.getElementById("conn-status").textContent = "Reconnecting...";
+    document.getElementById("conn-status").className = "red";
+    setTimeout(connect, 1000);
+  };
+  ws.onerror = () => ws.close();
+}
+
+// ============ CARDS ============
+
+function updateCards(market, preds) {
+  if (market) {
+    setDelta("cd-gold", "c-gold", market.gold_price, prevMarket?.gold_price, "$", 2);
+    setDelta("cd-dxy", "c-dxy", market.dxy, prevMarket?.dxy, "", 2);
+    setDelta("cd-eurusd", "c-eurusd", market.eurusd, prevMarket?.eurusd, "", 4);
+    setDelta("cd-jpy", "c-jpy", market.jpy, prevMarket?.jpy, "", 2);
+    setDelta("cd-oil", "c-oil", market.oil_price, prevMarket?.oil_price, "$", 2);
+    document.getElementById("c-gold").textContent = "$" + (market.gold_price ? market.gold_price.toFixed(2) : "—");
+    document.getElementById("c-dxy").textContent = market.dxy ? market.dxy.toFixed(2) : "—";
+    document.getElementById("c-eurusd").textContent = market.eurusd ? market.eurusd.toFixed(4) : "—";
+    document.getElementById("c-jpy").textContent = market.jpy ? market.jpy.toFixed(2) : "—";
+    document.getElementById("c-oil").textContent = "$" + (market.oil_price ? market.oil_price.toFixed(2) : "—");
+    if (!prevMarket || (market.gold_price && prevMarket.gold_price && Math.abs(market.gold_price - prevMarket.gold_price) > 0.01)) {
+      prevMarket = market;
+    }
+  }
+  if (preds.length > 0) {
+    const latest = preds[0];
+    const currentPrice = market ? market.gold_price : null;
+    document.getElementById("c-pred").textContent = "$" + latest.predicted_price.toFixed(2);
+    document.getElementById("update-inline").textContent = "Updated: " + toWIB(latest.timestamp);
+
+    // Prediction vs previous prediction delta
+    setDelta("cd-pred", null, latest.predicted_price, prevPredPrice, "$", 2);
+    prevPredPrice = latest.predicted_price;
+
+    // Prediction per Horizon
+    const HORIZONS = [1, 12, 24, 48, 72];
+    HORIZONS.forEach(h => {
+      const latestH = preds.find(p => p.horizon === h);
+      const cel = document.getElementById("h-" + h);
+      const del = document.getElementById("hd-" + h);
+      if (latestH && cel) {
+        cel.textContent = "$" + latestH.predicted_price.toFixed(2);
+        if (currentPrice && del) {
+          const delta = latestH.predicted_price - currentPrice;
+          const sign = delta >= 0 ? "+" : "";
+          del.textContent = sign + "$" + delta.toFixed(1);
+          del.style.color = delta >= 0 ? "#00cc96" : "#ff4d4d";
+        }
+      }
+    });
+  }
+}
+
+// ============ CHART ============
+
+const baseLayout = {
+  paper_bgcolor: "#1a1c23",
+  plot_bgcolor: "#1a1c23",
+  font: { color: "#aaa", size: 11 },
+  xaxis: { title: "", gridcolor: "#262730", zeroline: false },
+  yaxis: { title: "Price (USD)", gridcolor: "#262730", tickprefix: "$", zeroline: false },
+  margin: { l: 50, r: 20, t: 10, b: 50 },
+  height: 430,
+  hovermode: "x unified",
+  dragmode: "pan",
+};
+
+function dedupByMinute(preds) {
+  const map = {};
+  preds.forEach(p => {
+    const min = (p.timestamp || "").substring(0, 16);
+    if (!map[min]) map[min] = p;
+  });
+  return Object.values(map).sort((a, b) => (a.timestamp || "").localeCompare(b.timestamp || ""));
+}
+
+function filterByHorizon(preds, h) {
+  if (!h || h === "all") return preds;
+  return preds.filter(p => p.horizon === parseInt(h));
+}
+
+function filterByLookback(preds, lookback) {
+  if (!lookback || lookback === "all") return preds;
+  const ms = { "15m": 900000, "30m": 1800000, "1h": 3600000, "2h": 7200000, "3h": 10800000 };
+  const cutoff = Date.now() - (ms[lookback] || 0);
+  return preds.filter(p => {
+    const t = new Date(p.timestamp + "Z").getTime();
+    return !isNaN(t) && t >= cutoff;
+  });
+}
+
+function rebuildChart() {
+  const horizon = document.getElementById("sel-horizon").value;
+  const lookback = document.getElementById("sel-lookback").value;
+  let preds = filterByLookback(filterByHorizon(lastPreds, horizon), lookback);
+  preds = dedupByMinute(preds);
+  document.getElementById("data-pts").textContent = preds.length + " points";
+
+  if (activeTab === "pred") {
+    document.getElementById("controls").style.display = "";
+    renderPredictionHistory(preds);
+  } else {
+    document.getElementById("controls").style.display = "";
+    renderActualVsPredicted(preds);
+  }
+}
+
+function renderPredictionHistory(preds) {
+  const actualX = [], actualY = [], predX = [], predY = [];
+  const actualTooltips = [], predTooltips = [];
+  preds.forEach(p => {
+    const t = toWIB(p.timestamp);
+    if (p.actual_price != null) {
+      actualX.push(t); actualY.push(p.actual_price);
+      actualTooltips.push("Actual: $" + p.actual_price.toFixed(2));
+    }
+    predX.push(t); predY.push(p.predicted_price);
+    predTooltips.push("Predicted: $" + p.predicted_price.toFixed(2) + "<br>Horizon: " + p.horizon + "h");
+  });
+
+  const traceActual = {
+    x: actualX, y: actualY, type: "scatter", mode: "lines",
+    name: "Actual", line: { color: "#1f77b4", width: 2 },
+    text: actualTooltips, hoverinfo: "text+x",
+  };
+  const tracePred = {
+    x: predX, y: predY, type: "scatter", mode: "lines",
+    name: "Predicted", line: { color: "#ff7f0e", width: 2, dash: "dash" },
+    text: predTooltips, hoverinfo: "text+x",
+  };
+
+  const layout = Object.assign({}, baseLayout, {
+    legend: { orientation: "h", y: 1.12, font: { size: 11, color: "#aaa" } },
+    xaxis: Object.assign({}, baseLayout.xaxis, { title: "Time (WIB)" }),
+  });
+
+  Plotly.react("chart", [traceActual, tracePred], layout, { responsive: true });
+}
+
+function renderActualVsPredicted(preds) {
+  // Filter GC=F historical by lookback
+  const lookback = document.getElementById("sel-lookback").value;
+  const msMap = { "15m": 900000, "30m": 1800000, "1h": 3600000, "2h": 7200000, "3h": 10800000 };
+  let gcData = lastGcHistory;
+  if (lookback && lookback !== "all" && msMap[lookback] && lastGcHistory.length > 0) {
+    const lastTs = new Date(lastGcHistory[lastGcHistory.length - 1].x.replace(" ", "T") + "+07:00").getTime();
+    const cutoff = (isNaN(lastTs) ? Date.now() : lastTs) - msMap[lookback];
+    gcData = lastGcHistory.filter(pt => {
+      if (!pt.x) return false;
+      const t = new Date(pt.x.replace(" ", "T") + "+07:00").getTime();
+      return !isNaN(t) && t >= cutoff;
+    });
+  }
+
+  const gcX = [], gcY = [];
+  gcData.forEach(pt => {
+    gcX.push(pt.x || ""); gcY.push(pt.y);
+  });
+
+  // Prediction dots
+  const predX = [], predY = [], tooltips = [];
+  preds.forEach(p => {
+    predX.push(toWIB(p.timestamp));
+    predY.push(p.predicted_price);
+    let tip = "Predicted: $" + p.predicted_price.toFixed(2);
+    tip += "<br>Horizon: " + p.horizon + "h";
+    if (p.actual_price != null) tip += "<br>Actual: $" + p.actual_price.toFixed(2);
+    if (p.model_version) tip += "<br>Model: " + p.model_version;
+    tooltips.push(tip);
+  });
+
+  const traces = [];
+    if (gcX.length > 0) {
+    traces.push({
+      x: gcX, y: gcY, type: "scatter", mode: "lines",
+      name: "GC=F", line: { color: "#00cc96", width: 2 },
+    });
+  }
+  if (predX.length > 0) {
+    traces.push({
+      x: predX, y: predY, type: "scatter", mode: "markers",
+      name: "Prediction", text: tooltips, hoverinfo: "text+x",
+      marker: { size: 5, opacity: 0.7, color: "#ff7f0e", symbol: "circle", line: { width: 1, color: "#fff" } },
+    });
+  }
+
+  const layout = Object.assign({}, baseLayout, {
+    showlegend: false,
+    xaxis: Object.assign({}, baseLayout.xaxis, { title: "Time (WIB)" }),
+  });
+
+  Plotly.react("chart", traces, layout, { responsive: true });
+}
+
+function renderMarketCharts() {
+  const mkTrace = (data, color) => {
+    if (!data || data.length === 0) return [];
+    const x = data.map(d => d.x);
+    const y = data.map(d => d.y);
+    return [{
+      x: x, y: y, type: "scatter",
+      mode: "lines",
+      line: { color: color, width: 2 },
+      hoverinfo: "x+y",
+    }];
+  };
+
+  const miniLayout = (title, color) => ({
+    height: 280,
+    margin: { l: 55, r: 15, t: 30, b: 35 },
+    paper_bgcolor: "#1a1c23", plot_bgcolor: "#1a1c23",
+    font: { color: "#aaa", size: 10 },
+    xaxis: { gridcolor: "#262730", zeroline: false, tickfont: { size: 9 } },
+    yaxis: { gridcolor: "#262730", zeroline: false, tickfont: { size: 9 } },
+    title: { text: title, font: { size: 13, color: color } },
+    showlegend: false,
+  });
+
+  Plotly.react("mini-dxy",    mkTrace(lastDxyHistory, "#ff7f0e"),   miniLayout("DXY (DX-Y.NYB)", "#ff7f0e"));
+  Plotly.react("mini-eurusd", mkTrace(lastEurusdHistory, "#2962ff"), miniLayout("EUR/USD", "#2962ff"));
+  Plotly.react("mini-oil",    mkTrace(lastOilHistory, "#00cc96"),   miniLayout("CL=F (Crude Oil)", "#00cc96"));
+  Plotly.react("mini-jpy",    mkTrace(lastJpyHistory, "#ff4d4d"),   miniLayout("USD/JPY", "#ff4d4d"));
+}
+
+function switchTab(tab) {
+  activeTab = tab;
+  document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+  event.target.classList.add("active");
+  rebuildChart();
+}
+
+// ============ START ============
+connect();
+</script>
+</body>
+</html>

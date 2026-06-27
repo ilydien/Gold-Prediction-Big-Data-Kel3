@@ -2,6 +2,7 @@ import io
 import json
 import logging
 import os
+import asyncio
 import concurrent.futures
 import threading
 import time
@@ -12,7 +13,7 @@ import joblib
 import numpy as np
 import pandas as pd
 import yfinance as yf
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
 from sqlalchemy import create_engine, text
 
@@ -47,6 +48,41 @@ _champions = {}
 _history_buffer = pd.DataFrame()
 _processed_keys = set()
 
+_mkt_cache = {"data": {}, "ts": 0}
+MKT_CACHE_TTL = 60
+
+_TICKER_MAP = {
+    "GC=F": "gc_history",
+    "CL=F": "oil_history",
+    "DX-Y.NYB": "dxy_history",
+    "EURUSD=X": "eurusd_history",
+    "JPY=X": "jpy_history",
+}
+
+
+async def _warm_mkt_cache():
+    try:
+        ticker_str = " ".join(_TICKER_MAP.keys())
+        raw = await asyncio.to_thread(yf.download, ticker_str, period="1d", interval="5m", progress=False)
+        if not raw.empty:
+            for ticker, field in _TICKER_MAP.items():
+                try:
+                    close = raw["Close"].get(ticker)
+                    if close is not None:
+                        close = close.dropna()
+                        _mkt_cache["data"][field] = [
+                            {"x": str(i.tz_convert("Asia/Jakarta").strftime("%Y-%m-%d %H:%M:%S")), "y": float(close[i])}
+                            for i in close.index
+                        ]
+                    else:
+                        _mkt_cache["data"][field] = []
+                except Exception:
+                    _mkt_cache["data"][field] = []
+            _mkt_cache["ts"] = time.time()
+            log.info("Market history cache warmed (%d tickers)", len(_TICKER_MAP))
+    except Exception as e:
+        log.warning(f"Cache warmup failed: {e}")
+
 
 class PredictRequest(BaseModel):
     horizon: int = 12
@@ -72,7 +108,12 @@ def _get_s3():
         aws_secret_access_key=GARAGE_SECRET_KEY,
         region_name="us-east-1",
         use_ssl=False,
-        config=boto3.session.Config(signature_version="s3v4"),
+        config=boto3.session.Config(
+            signature_version="s3v4",
+            connect_timeout=5,
+            read_timeout=10,
+            retries={"max_attempts": 1},
+        ),
     )
 
 
@@ -279,10 +320,12 @@ def _polling_loop():
 
 @app.on_event("startup")
 def startup():
-    load_models()
-    t = threading.Thread(target=_polling_loop, daemon=True)
-    t.start()
-    log.info(f"Background polling started — {len(_models)} models loaded")
+    t_models = threading.Thread(target=load_models, daemon=True)
+    t_models.start()
+    t_poll = threading.Thread(target=_polling_loop, daemon=True)
+    t_poll.start()
+    asyncio.create_task(_warm_mkt_cache())
+    log.info("Startup complete — models loading in background")
 
 
 @app.get("/")
@@ -440,3 +483,79 @@ def get_metrics(limit: int = 20, horizon: int = None):
             ).fetchall()
     cols = ["id", "timestamp", "model_name", "mae", "rmse", "r2", "horizon"]
     return [dict(zip(cols, row)) for row in rows]
+
+
+@app.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket):
+    await websocket.accept()
+    log.info("WebSocket client connected")
+
+    while True:
+        try:
+            market = _get_latest_price_from_garage()
+            if market is None:
+                history_df = _fetch_yfinance_history()
+                if not history_df.empty:
+                    last = history_df.iloc[-1]
+                    market = {
+                        "timestamp": str(last.get("timestamp", "")),
+                        "gold_price": float(last["gold_price"]),
+                        "oil_price": float(last.get("oil_price", 0)),
+                        "dxy": float(last.get("dxy", 0)),
+                        "eurusd": float(last.get("eurusd", 0)),
+                        "jpy": float(last.get("jpy", 0)),
+                    }
+
+            preds = []
+            try:
+                with engine.connect() as conn:
+                    rows = conn.execute(
+                        text("SELECT horizon, predicted_price, actual_price, timestamp, model_version "
+                             "FROM predictions ORDER BY timestamp DESC LIMIT 3000")
+                    ).fetchall()
+                    preds = [
+                        {"horizon": r[0], "predicted_price": r[1], "actual_price": r[2], "timestamp": r[3].isoformat(), "model_version": r[4]}
+                        for r in rows
+                    ]
+            except Exception:
+                preds = []
+
+            now = time.time()
+            if not _mkt_cache["data"] or (now - _mkt_cache["ts"]) > MKT_CACHE_TTL:
+                try:
+                    ticker_str = " ".join(_TICKER_MAP.keys())
+                    raw = await asyncio.to_thread(yf.download, ticker_str, period="1d", interval="5m", progress=False)
+                    if not raw.empty:
+                        for ticker, field in _TICKER_MAP.items():
+                            try:
+                                close = raw["Close"].get(ticker)
+                                if close is not None:
+                                    close = close.dropna()
+                                    _mkt_cache["data"][field] = [
+                                        {"x": str(i.tz_convert("Asia/Jakarta").strftime("%Y-%m-%d %H:%M:%S")), "y": float(close[i])}
+                                        for i in close.index
+                                    ]
+                                else:
+                                    _mkt_cache["data"][field] = []
+                            except Exception:
+                                _mkt_cache["data"][field] = []
+                        _mkt_cache["ts"] = now
+                except Exception as e:
+                    log.warning(f"yfinance market history download failed: {e}")
+
+            await websocket.send_json({
+                "market": market,
+                "predictions": preds,
+                "gc_history": _mkt_cache["data"].get("gc_history", []),
+                "dxy_history": _mkt_cache["data"].get("dxy_history", []),
+                "eurusd_history": _mkt_cache["data"].get("eurusd_history", []),
+                "jpy_history": _mkt_cache["data"].get("jpy_history", []),
+                "oil_history": _mkt_cache["data"].get("oil_history", []),
+            })
+            await asyncio.sleep(1)
+        except WebSocketDisconnect:
+            log.info("WebSocket client disconnected")
+            break
+        except Exception as e:
+            log.warning(f"WebSocket error: {e}")
+            await asyncio.sleep(2)
