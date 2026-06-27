@@ -1,0 +1,136 @@
+{
+  "timestamp": "20260627_103333",
+  "method": "RandomizedSearchCV",
+  "model": "svr",
+  "n_iter": 50,
+  "config": {
+    "horizons": [
+      1,
+      12,
+      24,
+      48,
+      72
+    ],
+    "n_features": 27,
+    "yf_period": "730d"
+  },
+  "param_distributions": {
+    "model": "LinearSVR",
+    "svr__C": "uniform(0.01, 100)",
+    "svr__epsilon": "uniform(0.01, 0.5)",
+    "svr__loss": [
+      "epsilon_insensitive",
+      "squared_epsilon_insensitive"
+    ],
+    "svr__max_iter": 20000
+  },
+  "best_params_per_horizon": {
+    "1": {
+      "C": 93.86527090157502,
+      "epsilon": 0.010389382920507164,
+      "loss": "squared_epsilon_insensitive"
+    },
+    "12": {
+      "C": 37.464011884736244,
+      "epsilon": 0.4853571532049581,
+      "loss": "epsilon_insensitive"
+    },
+    "24": {
+      "C": 92.1974235023117,
+      "epsilon": 0.05424625102595975,
+      "loss": "epsilon_insensitive"
+    },
+    "48": {
+      "C": 66.2622284353982,
+      "epsilon": 0.16585553804470549,
+      "loss": "squared_epsilon_insensitive"
+    },
+    "72": {
+      "C": 17.34646535077721,
+      "epsilon": 0.2055303037866204,
+      "loss": "squared_epsilon_insensitive"
+    }
+  },
+  "all_results": [
+    {
+      "model_name": "svr",
+      "mae": 19.580728030119076,
+      "rmse": 29.682588346621277,
+      "r2": 0.991129121652965,
+      "model": "Pipeline(steps=[('scaler', StandardScaler()),\n                ('svr',\n                 LinearSVR(C=93.86527090157502, epsilon=0.010389382920507164,\n                           loss='squared_epsilon_insensitive', max_iter=20000,\n                           random_state=42))])",
+      "best_params": {
+        "C": 93.86527090157502,
+        "epsilon": 0.010389382920507164,
+        "loss": "squared_epsilon_insensitive"
+      },
+      "feature_importance": {},
+      "horizon": 1,
+      "n_train": 10525,
+      "n_test": 2632
+    },
+    {
+      "model_name": "svr",
+      "mae": 53.2576404065906,
+      "rmse": 78.20372696812875,
+      "r2": 0.9384461291536095,
+      "model": "Pipeline(steps=[('scaler', StandardScaler()),\n                ('svr',\n                 LinearSVR(C=37.464011884736244, epsilon=0.4853571532049581,\n                           max_iter=20000, random_state=42))])",
+      "best_params": {
+        "C": 37.464011884736244,
+        "epsilon": 0.4853571532049581,
+        "loss": "epsilon_insensitive"
+      },
+      "feature_importance": {},
+      "horizon": 12,
+      "n_train": 10516,
+      "n_test": 2630
+    },
+    {
+      "model_name": "svr",
+      "mae": 86.28595216850971,
+      "rmse": 115.95483811085748,
+      "r2": 0.8647386142347481,
+      "model": "Pipeline(steps=[('scaler', StandardScaler()),\n                ('svr',\n                 LinearSVR(C=92.1974235023117, epsilon=0.05424625102595975,\n                           max_iter=20000, random_state=42))])",
+      "best_params": {
+        "C": 92.1974235023117,
+        "epsilon": 0.05424625102595975,
+        "loss": "epsilon_insensitive"
+      },
+      "feature_importance": {},
+      "horizon": 24,
+      "n_train": 10507,
+      "n_test": 2627
+    },
+    {
+      "model_name": "svr",
+      "mae": 147.78875791828742,
+      "rmse": 183.94920427347122,
+      "r2": 0.6598039546478756,
+      "model": "Pipeline(steps=[('scaler', StandardScaler()),\n                ('svr',\n                 LinearSVR(C=66.2622284353982, epsilon=0.16585553804470549,\n                           loss='squared_epsilon_insensitive', max_iter=20000,\n                           random_state=42))])",
+      "best_params": {
+        "C": 66.2622284353982,
+        "epsilon": 0.16585553804470549,
+        "loss": "squared_epsilon_insensitive"
+      },
+      "feature_importance": {},
+      "horizon": 48,
+      "n_train": 10488,
+      "n_test": 2622
+    },
+    {
+      "model_name": "svr",
+      "mae": 190.11002448793204,
+      "rmse": 231.37118186403828,
+      "r2": 0.46205263834000476,
+      "model": "Pipeline(steps=[('scaler', StandardScaler()),\n                ('svr',\n                 LinearSVR(C=17.34646535077721, epsilon=0.2055303037866204,\n                           loss='squared_epsilon_insensitive', max_iter=20000,\n                           random_state=42))])",
+      "best_params": {
+        "C": 17.34646535077721,
+        "epsilon": 0.2055303037866204,
+        "loss": "squared_epsilon_insensitive"
+      },
+      "feature_importance": {},
+      "horizon": 72,
+      "n_train": 10468,
+      "n_test": 2618
+    }
+  ]
+}

@@ -1,0 +1,473 @@
+{
+  "timestamp": "20260627_091700",
+  "config": {
+    "horizons": [
+      1,
+      12,
+      24,
+      48,
+      72
+    ],
+    "n_features": 27,
+    "features": [
+      "lag_3",
+      "lag_6",
+      "lag_12",
+      "lag_24",
+      "lag_72",
+      "lag_168",
+      "rolling_mean_24",
+      "rolling_std_24",
+      "rolling_mean_72",
+      "rolling_std_72",
+      "rolling_mean_168",
+      "rolling_std_168",
+      "return_1h",
+      "return_24h",
+      "return_168h",
+      "return_oil_24h",
+      "return_dxy_24h",
+      "return_eurusd_24h",
+      "return_jpy_24h",
+      "lag_1_oil",
+      "lag_1_dxy",
+      "lag_1_eurusd",
+      "lag_1_jpy",
+      "gold_dxy_ratio",
+      "oil_dxy_ratio",
+      "hour_of_day",
+      "day_of_week"
+    ],
+    "models": [
+      "linear_regression",
+      "gradient_boosting",
+      "svr"
+    ],
+    "yf_period": "730d",
+    "yf_interval": "1h"
+  },
+  "champions": {
+    "1": {
+      "model": "linear_regression",
+      "mae": 18.160640856306685,
+      "rmse": 28.40919224099235,
+      "r2": 0.991873924436386,
+      "best_params": {}
+    },
+    "12": {
+      "model": "svr",
+      "mae": 56.41785810096086,
+      "rmse": 81.35774493940112,
+      "r2": 0.9333809750286574,
+      "best_params": {
+        "C": 1,
+        "epsilon": 0.5,
+        "gamma": 0.001,
+        "kernel": "linear"
+      }
+    },
+    "24": {
+      "model": "svr",
+      "mae": 86.16514089674594,
+      "rmse": 115.74277128793823,
+      "r2": 0.8652329139583473,
+      "best_params": {
+        "C": 50,
+        "epsilon": 0.1,
+        "gamma": 0.001,
+        "kernel": "linear"
+      }
+    },
+    "48": {
+      "model": "svr",
+      "mae": 120.62725565373749,
+      "rmse": 157.52602001055763,
+      "r2": 0.7505186791745065,
+      "best_params": {
+        "C": 1,
+        "epsilon": 0.5,
+        "gamma": 0.001,
+        "kernel": "linear"
+      }
+    },
+    "72": {
+      "model": "svr",
+      "mae": 144.75623413611928,
+      "rmse": 185.14770190767752,
+      "r2": 0.6555248454934813,
+      "best_params": {
+        "C": 1,
+        "epsilon": 0.5,
+        "gamma": 0.001,
+        "kernel": "linear"
+      }
+    }
+  },
+  "all_results": [
+    {
+      "model_name": "linear_regression",
+      "mae": 18.160640856306685,
+      "rmse": 28.40919224099235,
+      "r2": 0.991873924436386,
+      "model": "Pipeline(steps=[('scaler', StandardScaler()), ('lr', LinearRegression())])",
+      "best_params": {},
+      "feature_importance": {},
+      "horizon": 1,
+      "n_train": 10525,
+      "n_test": 2632
+    },
+    {
+      "model_name": "gradient_boosting",
+      "mae": 277.68422349315176,
+      "rmse": 372.0995504887994,
+      "r2": -0.3940597109149311,
+      "model": "Pipeline(steps=[('scaler', StandardScaler()),\n                ('gbr', GradientBoostingRegressor(random_state=42))])",
+      "best_params": {
+        "learning_rate": 0.1,
+        "max_depth": 3,
+        "n_estimators": 100
+      },
+      "feature_importance": {
+        "lag_3": 0.462695,
+        "gold_dxy_ratio": 0.433486,
+        "rolling_mean_168": 0.091347,
+        "rolling_mean_72": 0.00698,
+        "rolling_mean_24": 0.00477,
+        "lag_6": 0.000327,
+        "lag_72": 0.000155,
+        "lag_1_jpy": 9.5e-05,
+        "return_24h": 3.1e-05,
+        "return_1h": 2.7e-05,
+        "lag_24": 2e-05,
+        "oil_dxy_ratio": 1.9e-05,
+        "lag_168": 1.2e-05,
+        "lag_1_dxy": 8e-06,
+        "return_168h": 8e-06,
+        "lag_12": 5e-06,
+        "lag_1_oil": 4e-06,
+        "lag_1_eurusd": 3e-06,
+        "rolling_std_168": 3e-06,
+        "return_jpy_24h": 1e-06,
+        "return_oil_24h": 1e-06,
+        "return_eurusd_24h": 1e-06,
+        "rolling_std_72": 1e-06,
+        "return_dxy_24h": 1e-06,
+        "rolling_std_24": 0.0,
+        "hour_of_day": 0.0,
+        "day_of_week": 0.0
+      },
+      "horizon": 1,
+      "n_train": 10525,
+      "n_test": 2632
+    },
+    {
+      "model_name": "svr",
+      "mae": 22.386645371202555,
+      "rmse": 34.285341640571865,
+      "r2": 0.9881646788190502,
+      "model": "Pipeline(steps=[('scaler', StandardScaler()),\n                ('svr', SVR(C=1, epsilon=0.2, gamma=0.001, kernel='linear'))])",
+      "best_params": {
+        "C": 1,
+        "epsilon": 0.2,
+        "gamma": 0.001,
+        "kernel": "linear"
+      },
+      "feature_importance": {},
+      "horizon": 1,
+      "n_train": 10525,
+      "n_test": 2632
+    },
+    {
+      "model_name": "linear_regression",
+      "mae": 59.9396675166773,
+      "rmse": 83.2893019612605,
+      "r2": 0.9301801499098383,
+      "model": "Pipeline(steps=[('scaler', StandardScaler()), ('lr', LinearRegression())])",
+      "best_params": {},
+      "feature_importance": {},
+      "horizon": 12,
+      "n_train": 10516,
+      "n_test": 2630
+    },
+    {
+      "model_name": "gradient_boosting",
+      "mae": 368.485718551929,
+      "rmse": 462.5604105230875,
+      "r2": -1.1534628641855238,
+      "model": "Pipeline(steps=[('scaler', StandardScaler()),\n                ('gbr',\n                 GradientBoostingRegressor(learning_rate=0.05,\n                                           random_state=42))])",
+      "best_params": {
+        "learning_rate": 0.05,
+        "max_depth": 3,
+        "n_estimators": 100
+      },
+      "feature_importance": {
+        "gold_dxy_ratio": 0.378886,
+        "lag_3": 0.329346,
+        "rolling_mean_168": 0.143309,
+        "rolling_mean_72": 0.062531,
+        "rolling_mean_24": 0.043238,
+        "lag_1_eurusd": 0.018102,
+        "lag_12": 0.012492,
+        "lag_6": 0.007135,
+        "lag_72": 0.002855,
+        "lag_24": 0.001282,
+        "lag_1_oil": 0.000289,
+        "lag_168": 0.00021,
+        "lag_1_jpy": 8e-05,
+        "rolling_std_168": 6.8e-05,
+        "return_24h": 6.6e-05,
+        "lag_1_dxy": 5.9e-05,
+        "oil_dxy_ratio": 3.4e-05,
+        "return_168h": 7e-06,
+        "return_oil_24h": 4e-06,
+        "rolling_std_72": 2e-06,
+        "return_eurusd_24h": 2e-06,
+        "return_dxy_24h": 1e-06,
+        "return_1h": 1e-06,
+        "hour_of_day": 0.0,
+        "rolling_std_24": 0.0,
+        "return_jpy_24h": 0.0,
+        "day_of_week": 0.0
+      },
+      "horizon": 12,
+      "n_train": 10516,
+      "n_test": 2630
+    },
+    {
+      "model_name": "svr",
+      "mae": 56.41785810096086,
+      "rmse": 81.35774493940112,
+      "r2": 0.9333809750286574,
+      "model": "Pipeline(steps=[('scaler', StandardScaler()),\n                ('svr', SVR(C=1, epsilon=0.5, gamma=0.001, kernel='linear'))])",
+      "best_params": {
+        "C": 1,
+        "epsilon": 0.5,
+        "gamma": 0.001,
+        "kernel": "linear"
+      },
+      "feature_importance": {},
+      "horizon": 12,
+      "n_train": 10516,
+      "n_test": 2630
+    },
+    {
+      "model_name": "linear_regression",
+      "mae": 95.40858262255468,
+      "rmse": 124.88703391854551,
+      "r2": 0.8430971663136536,
+      "model": "Pipeline(steps=[('scaler', StandardScaler()), ('lr', LinearRegression())])",
+      "best_params": {},
+      "feature_importance": {},
+      "horizon": 24,
+      "n_train": 10507,
+      "n_test": 2627
+    },
+    {
+      "model_name": "gradient_boosting",
+      "mae": 420.65561602958076,
+      "rmse": 508.1038627210266,
+      "r2": -1.597174186637628,
+      "model": "Pipeline(steps=[('scaler', StandardScaler()),\n                ('gbr',\n                 GradientBoostingRegressor(n_estimators=50, random_state=42))])",
+      "best_params": {
+        "learning_rate": 0.1,
+        "max_depth": 3,
+        "n_estimators": 50
+      },
+      "feature_importance": {
+        "gold_dxy_ratio": 0.448363,
+        "rolling_mean_168": 0.213928,
+        "lag_3": 0.169558,
+        "lag_1_eurusd": 0.077454,
+        "rolling_mean_72": 0.059665,
+        "rolling_mean_24": 0.019254,
+        "lag_72": 0.007558,
+        "lag_24": 0.001243,
+        "lag_1_oil": 0.000812,
+        "lag_12": 0.000784,
+        "lag_1_dxy": 0.000418,
+        "lag_168": 0.000244,
+        "rolling_std_168": 0.000215,
+        "lag_1_jpy": 0.000203,
+        "oil_dxy_ratio": 0.00012,
+        "return_24h": 9.3e-05,
+        "return_168h": 4.5e-05,
+        "return_oil_24h": 2e-05,
+        "return_dxy_24h": 1.3e-05,
+        "lag_6": 1e-05,
+        "rolling_std_24": 0.0,
+        "rolling_std_72": 0.0,
+        "return_1h": 0.0,
+        "return_eurusd_24h": 0.0,
+        "return_jpy_24h": 0.0,
+        "hour_of_day": 0.0,
+        "day_of_week": 0.0
+      },
+      "horizon": 24,
+      "n_train": 10507,
+      "n_test": 2627
+    },
+    {
+      "model_name": "svr",
+      "mae": 86.16514089674594,
+      "rmse": 115.74277128793823,
+      "r2": 0.8652329139583473,
+      "model": "Pipeline(steps=[('scaler', StandardScaler()),\n                ('svr', SVR(C=50, gamma=0.001, kernel='linear'))])",
+      "best_params": {
+        "C": 50,
+        "epsilon": 0.1,
+        "gamma": 0.001,
+        "kernel": "linear"
+      },
+      "feature_importance": {},
+      "horizon": 24,
+      "n_train": 10507,
+      "n_test": 2627
+    },
+    {
+      "model_name": "linear_regression",
+      "mae": 149.12893415438904,
+      "rmse": 185.4899208903399,
+      "r2": 0.6540812795798653,
+      "model": "Pipeline(steps=[('scaler', StandardScaler()), ('lr', LinearRegression())])",
+      "best_params": {},
+      "feature_importance": {},
+      "horizon": 48,
+      "n_train": 10488,
+      "n_test": 2622
+    },
+    {
+      "model_name": "gradient_boosting",
+      "mae": 444.30427606194877,
+      "rmse": 535.3102943213556,
+      "r2": -1.8810090610634433,
+      "model": "Pipeline(steps=[('scaler', StandardScaler()),\n                ('gbr',\n                 GradientBoostingRegressor(learning_rate=0.05,\n                                           random_state=42))])",
+      "best_params": {
+        "learning_rate": 0.05,
+        "max_depth": 3,
+        "n_estimators": 100
+      },
+      "feature_importance": {
+        "rolling_mean_168": 0.371853,
+        "gold_dxy_ratio": 0.345821,
+        "lag_1_eurusd": 0.068014,
+        "rolling_mean_72": 0.04804,
+        "lag_168": 0.044273,
+        "lag_3": 0.038793,
+        "rolling_mean_24": 0.036509,
+        "lag_12": 0.021533,
+        "lag_72": 0.019349,
+        "lag_1_oil": 0.002473,
+        "lag_1_dxy": 0.001144,
+        "rolling_std_168": 0.000698,
+        "lag_6": 0.000647,
+        "lag_1_jpy": 0.000396,
+        "return_168h": 0.000137,
+        "return_24h": 0.000123,
+        "oil_dxy_ratio": 7.1e-05,
+        "lag_24": 5.9e-05,
+        "return_oil_24h": 2.5e-05,
+        "rolling_std_72": 2.2e-05,
+        "return_dxy_24h": 1e-05,
+        "rolling_std_24": 6e-06,
+        "return_eurusd_24h": 4e-06,
+        "return_jpy_24h": 1e-06,
+        "return_1h": 0.0,
+        "hour_of_day": 0.0,
+        "day_of_week": 0.0
+      },
+      "horizon": 48,
+      "n_train": 10488,
+      "n_test": 2622
+    },
+    {
+      "model_name": "svr",
+      "mae": 120.62725565373749,
+      "rmse": 157.52602001055763,
+      "r2": 0.7505186791745065,
+      "model": "Pipeline(steps=[('scaler', StandardScaler()),\n                ('svr', SVR(C=1, epsilon=0.5, gamma=0.001, kernel='linear'))])",
+      "best_params": {
+        "C": 1,
+        "epsilon": 0.5,
+        "gamma": 0.001,
+        "kernel": "linear"
+      },
+      "feature_importance": {},
+      "horizon": 48,
+      "n_train": 10488,
+      "n_test": 2622
+    },
+    {
+      "model_name": "linear_regression",
+      "mae": 197.0684837708894,
+      "rmse": 238.77821623922443,
+      "r2": 0.42705800105291436,
+      "model": "Pipeline(steps=[('scaler', StandardScaler()), ('lr', LinearRegression())])",
+      "best_params": {},
+      "feature_importance": {},
+      "horizon": 72,
+      "n_train": 10468,
+      "n_test": 2618
+    },
+    {
+      "model_name": "gradient_boosting",
+      "mae": 496.9549027123751,
+      "rmse": 582.3595160923977,
+      "r2": -2.408031536181167,
+      "model": "Pipeline(steps=[('scaler', StandardScaler()),\n                ('gbr',\n                 GradientBoostingRegressor(n_estimators=50, random_state=42))])",
+      "best_params": {
+        "learning_rate": 0.1,
+        "max_depth": 3,
+        "n_estimators": 50
+      },
+      "feature_importance": {
+        "rolling_mean_168": 0.504928,
+        "gold_dxy_ratio": 0.330185,
+        "rolling_mean_72": 0.039629,
+        "lag_168": 0.038197,
+        "rolling_mean_24": 0.034699,
+        "lag_1_eurusd": 0.027125,
+        "lag_3": 0.011984,
+        "lag_12": 0.004666,
+        "lag_1_oil": 0.00247,
+        "oil_dxy_ratio": 0.001363,
+        "lag_1_jpy": 0.000976,
+        "rolling_std_168": 0.000846,
+        "lag_72": 0.000759,
+        "lag_24": 0.000757,
+        "lag_1_dxy": 0.000729,
+        "lag_6": 0.000253,
+        "return_168h": 0.000213,
+        "rolling_std_72": 9.3e-05,
+        "return_oil_24h": 5.6e-05,
+        "return_24h": 2.9e-05,
+        "return_dxy_24h": 2.3e-05,
+        "rolling_std_24": 1.9e-05,
+        "return_1h": 0.0,
+        "return_eurusd_24h": 0.0,
+        "return_jpy_24h": 0.0,
+        "hour_of_day": 0.0,
+        "day_of_week": 0.0
+      },
+      "horizon": 72,
+      "n_train": 10468,
+      "n_test": 2618
+    },
+    {
+      "model_name": "svr",
+      "mae": 144.75623413611928,
+      "rmse": 185.14770190767752,
+      "r2": 0.6555248454934813,
+      "model": "Pipeline(steps=[('scaler', StandardScaler()),\n                ('svr', SVR(C=1, epsilon=0.5, gamma=0.001, kernel='linear'))])",
+      "best_params": {
+        "C": 1,
+        "epsilon": 0.5,
+        "gamma": 0.001,
+        "kernel": "linear"
+      },
+      "feature_importance": {},
+      "horizon": 72,
+      "n_train": 10468,
+      "n_test": 2618
+    }
+  ]
+}
