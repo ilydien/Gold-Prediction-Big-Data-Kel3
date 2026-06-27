@@ -9,7 +9,6 @@ import joblib
 import mlflow
 import pandas as pd
 import psycopg2
-from sklearn.ensemble import GradientBoostingRegressor
 from sklearn.linear_model import LinearRegression
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 from sklearn.model_selection import GridSearchCV, TimeSeriesSplit, train_test_split
@@ -47,10 +46,6 @@ MODELS = {
         ("scaler", StandardScaler()),
         ("lr", LinearRegression()),
     ]),
-    "gradient_boosting": Pipeline([
-        ("scaler", StandardScaler()),
-        ("gbr", GradientBoostingRegressor(random_state=42)),
-    ]),
     "svr": Pipeline([
         ("scaler", StandardScaler()),
         ("svr", SVR()),
@@ -59,20 +54,12 @@ MODELS = {
 
 PARAM_GRIDS = {
     "linear_regression": {},
-    "gradient_boosting": {
-        "gbr__n_estimators": [50, 100, 200],
-        "gbr__learning_rate": [0.05, 0.1],
-        "gbr__max_depth": [3, 5],
-    },
     "svr": {
-        "svr__kernel": ["rbf", "linear"],
-        "svr__C": [1, 50, 500],
-        "svr__gamma": [0.001, 0.01, 0.1],
-        "svr__epsilon": [0.1, 0.2, 0.5],
+        "svr__kernel":  ["linear"],
+        "svr__C":       [1, 10, 50, 100, 500],
+        "svr__epsilon": [0.05, 0.1, 0.2, 0.5],
     },
 }
-
-FEATURE_IMPORTANCE_MODELS = {"gradient_boosting": "gbr"}
 
 
 def pg_connect():
@@ -94,7 +81,7 @@ def train_and_evaluate(model, model_name, X_train, X_test, y_train, y_test):
     param_grid = PARAM_GRIDS.get(model_name, {})
     if param_grid:
         tscv = TimeSeriesSplit(n_splits=3)
-        search = GridSearchCV(model, param_grid, cv=tscv, scoring="neg_mean_absolute_error", n_jobs=1)
+        search = GridSearchCV(model, param_grid, cv=tscv, scoring="neg_mean_absolute_error", n_jobs=-1)
         search.fit(X_train, y_train)
         best_model = search.best_estimator_
         best_params = {k.split("__", 1)[-1]: v for k, v in search.best_params_.items()}
@@ -112,18 +99,6 @@ def train_and_evaluate(model, model_name, X_train, X_test, y_train, y_test):
         "model": best_model,
         "best_params": best_params,
     }
-
-
-def extract_feature_importance(model, model_name):
-    step_name = FEATURE_IMPORTANCE_MODELS.get(model_name)
-    if not step_name:
-        return {}
-    estimator = model.named_steps.get(step_name)
-    if not hasattr(estimator, "feature_importances_"):
-        return {}
-    importances = estimator.feature_importances_
-    pairs = sorted(zip(FEATURE_COLUMNS, importances), key=lambda x: x[1], reverse=True)
-    return {feat: round(float(imp), 6) for feat, imp in pairs}
 
 
 def _load_champion_meta(horizon):
@@ -201,7 +176,6 @@ def _save_best_model(horizon, best_result):
         "features": FEATURE_COLUMNS,
         "n_features": len(FEATURE_COLUMNS),
         "n_samples": best_result.get("n_samples", 0),
-        "feature_importance": extract_feature_importance(best_result["model"], model_name),
     }
     s3.put_object(
         Bucket="models",
@@ -259,10 +233,6 @@ def _log_to_mlflow(result: dict, timestamp: str, horizon: int):
             mlflow.log_metrics({
                 "mae": result["mae"], "rmse": result["rmse"], "r2": result["r2"],
             })
-            if name in FEATURE_IMPORTANCE_MODELS:
-                importance = extract_feature_importance(result["model"], name)
-                for feat, imp in importance.items():
-                    mlflow.log_metric(f"importance_{feat}", imp)
             mlflow.sklearn.log_model(result["model"], f"h={horizon}_{name}")
     except Exception as e:
         print(f"    MLflow skipped for {name} h={horizon}: {e}")
@@ -324,13 +294,6 @@ def run_training():
 
         best = min(results, key=lambda r: r["mae"])
         print(f"\n  Best: {best['model_name']} (MAE={best['mae']:.4f})")
-
-        importance = extract_feature_importance(best["model"], best["model_name"])
-        if importance:
-            print(f"\n  Feature importance (top 5):")
-            for feat, imp in list(importance.items())[:5]:
-                bar = "█" * int(imp * 50) if imp > 0 else ""
-                print(f"    {feat:20s} {imp:.4f} {bar}")
 
         metadata = _save_best_model(horizon, best)
         save_metrics_to_postgres(metadata)
