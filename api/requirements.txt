@@ -1,0 +1,11 @@
+fastapi
+uvicorn
+pandas
+numpy
+joblib
+psycopg2-binary
+sqlalchemy
+boto3
+pydantic
+scikit-learn
+yfinance
