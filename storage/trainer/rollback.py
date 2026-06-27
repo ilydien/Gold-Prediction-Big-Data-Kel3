@@ -9,7 +9,7 @@ GARAGE_ENDPOINT = os.getenv("GARAGE_ENDPOINT", "http://localhost:3900")
 GARAGE_ACCESS_KEY = os.getenv("GARAGE_ACCESS_KEY", "")
 GARAGE_SECRET_KEY = os.getenv("GARAGE_SECRET_KEY", "")
 PREDICTION_HORIZONS = [
-    int(h) for h in os.getenv("PREDICTION_HORIZONS", "12,24,48,72,168,720").split(",")
+    int(h) for h in os.getenv("PREDICTION_HORIZONS", "1,12,24,48,72").split(",")
 ]
 
 MODELS_BUCKET = "models"

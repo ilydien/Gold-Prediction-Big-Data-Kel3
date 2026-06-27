@@ -1,8 +1,7 @@
 import pandas as pd
 
 FEATURE_COLUMNS = [
-    # Lag features (7)
-    "lag_1",
+    # Lag features (6)
     "lag_3",
     "lag_6",
     "lag_12",
@@ -18,17 +17,20 @@ FEATURE_COLUMNS = [
     "rolling_mean_168",
     "rolling_std_168",
 
-    # Returns (5)
+    # Returns (7)
     "return_1h",
     "return_24h",
     "return_168h",
     "return_oil_24h",
     "return_dxy_24h",
+    "return_eurusd_24h",
+    "return_jpy_24h",
 
-    # Cross-asset (5)
+    # Cross-asset (6)
     "lag_1_oil",
     "lag_1_dxy",
     "lag_1_eurusd",
+    "lag_1_jpy",
     "gold_dxy_ratio",
     "oil_dxy_ratio",
 
@@ -47,7 +49,6 @@ def compute_features(df: pd.DataFrame) -> pd.DataFrame:
     result = df.copy()
 
     # Lag features
-    result["lag_1"] = result["gold_price"].shift(1)
     result["lag_3"] = result["gold_price"].shift(3)
     result["lag_6"] = result["gold_price"].shift(6)
     result["lag_12"] = result["gold_price"].shift(12)
@@ -69,16 +70,21 @@ def compute_features(df: pd.DataFrame) -> pd.DataFrame:
     result["return_168h"] = result["gold_price"].pct_change(168)
     result["return_oil_24h"] = result["oil_price"].pct_change(24)
     result["return_dxy_24h"] = result["dxy"].pct_change(24)
+    result["return_eurusd_24h"] = result["eurusd"].pct_change(24)
+    result["return_jpy_24h"] = result["jpy"].pct_change(24)
 
     # Cross-asset
     result["lag_1_oil"] = result["oil_price"].shift(1)
     result["lag_1_dxy"] = result["dxy"].shift(1)
     result["lag_1_eurusd"] = result["eurusd"].shift(1)
+    result["lag_1_jpy"] = result["jpy"].shift(1)
     result["gold_dxy_ratio"] = result["gold_price"] / result["dxy"]
     result["oil_dxy_ratio"] = result["oil_price"] / result["dxy"]
 
     # Calendar
-    timestamps = pd.to_datetime(result["timestamp"], format="mixed")
+    timestamps = pd.to_datetime(result["timestamp"], utc=True, errors="coerce")
+    if timestamps.isna().all():
+        raise ValueError("No valid timestamps found in the data; cannot compute calendar features.")
     result["hour_of_day"] = timestamps.dt.hour
     result["day_of_week"] = timestamps.dt.dayofweek
 
@@ -89,7 +95,7 @@ def get_feature_vector(
     history: pd.DataFrame, latest_row: dict
 ) -> dict:
     """
-    Compute 25 features for inference.
+    Compute 27 features for inference.
     - history: hourly data (min 168 rows) with columns:
         timestamp, gold_price, oil_price, dxy, eurusd, jpy
     - latest_row: current gold price from Dio (treated as current hour)

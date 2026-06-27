@@ -15,6 +15,7 @@ from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 from sklearn.model_selection import GridSearchCV, TimeSeriesSplit, train_test_split
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
+from sklearn.svm import SVR
 
 from shared.features import FEATURE_COLUMNS, TARGET_COLUMN
 
@@ -28,7 +29,7 @@ POSTGRES_USER = os.getenv("POSTGRES_USER", "postgres")
 POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD", "postgres")
 MLFLOW_TRACKING_URI = os.getenv("MLFLOW_TRACKING_URI", "http://mlflow:5000")
 PREDICTION_HORIZONS = [
-    int(h) for h in os.getenv("PREDICTION_HORIZONS", "12,24,48,72,168,720").split(",")
+    int(h) for h in os.getenv("PREDICTION_HORIZONS", "1,12,24,48,72").split(",")
 ]
 
 s3 = boto3.client(
@@ -50,6 +51,10 @@ MODELS = {
         ("scaler", StandardScaler()),
         ("gbr", GradientBoostingRegressor(random_state=42)),
     ]),
+    "svr": Pipeline([
+        ("scaler", StandardScaler()),
+        ("svr", SVR()),
+    ]),
 }
 
 PARAM_GRIDS = {
@@ -58,6 +63,12 @@ PARAM_GRIDS = {
         "gbr__n_estimators": [50, 100, 200],
         "gbr__learning_rate": [0.05, 0.1],
         "gbr__max_depth": [3, 5],
+    },
+    "svr": {
+        "svr__kernel": ["rbf", "linear"],
+        "svr__C": [1, 50, 500],
+        "svr__gamma": [0.001, 0.01, 0.1],
+        "svr__epsilon": [0.1, 0.2, 0.5],
     },
 }
 

@@ -28,6 +28,7 @@ services:
         mlflow server \
           --host 0.0.0.0 \
           --port 5000 \
+          --allowed-hosts '*' \
           --backend-store-uri sqlite:////mlflow/mlflow.db \
           --default-artifact-root s3://mlflow-artifacts/
     environment:
@@ -64,7 +65,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       MLFLOW_TRACKING_URI: http://mlflow:5000
       DATA_SOURCE: ${DATA_SOURCE:-yfinance}
-      PREDICTION_HORIZONS: ${PREDICTION_HORIZONS:-12,24,48,72,168,720}
+      PREDICTION_HORIZONS: ${PREDICTION_HORIZONS:-1,12,24,48,72}
       YF_PERIOD: ${YF_PERIOD:-730d}
       RETRAIN_COUNT_THRESHOLD: ${RETRAIN_COUNT_THRESHOLD:-2000}
       RETRAIN_PERF_WINDOW: ${RETRAIN_PERF_WINDOW:-100}

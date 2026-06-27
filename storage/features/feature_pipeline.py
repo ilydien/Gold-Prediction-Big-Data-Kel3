@@ -80,7 +80,6 @@ def aggregate_to_hourly(df: pd.DataFrame) -> pd.DataFrame:
         "jpy": "last",
     }).reset_index()
     hourly = hourly.rename(columns={"hour": "timestamp"})
-    hourly["timestamp"] = hourly["timestamp"].astype(str)
     print(f"  Hourly aggregation: {len(hourly)} rows")
     return hourly
 

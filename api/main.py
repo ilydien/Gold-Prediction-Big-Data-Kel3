@@ -27,7 +27,7 @@ POSTGRES_DB = os.getenv("POSTGRES_DB", "gold_prediction")
 POSTGRES_USER = os.getenv("POSTGRES_USER", "postgres")
 POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD", "postgres")
 PREDICTION_HORIZONS = [
-    int(h) for h in os.getenv("PREDICTION_HORIZONS", "12,24,48,72,168,720").split(",")
+    int(h) for h in os.getenv("PREDICTION_HORIZONS", "1,12,24,48,72").split(",")
 ]
 
 DATABASE_URL = (

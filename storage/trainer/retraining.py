@@ -18,7 +18,7 @@ COUNT_THRESHOLD = int(os.getenv("RETRAIN_COUNT_THRESHOLD", "2000"))
 PERF_WINDOW = int(os.getenv("RETRAIN_PERF_WINDOW", "100"))
 PERF_FACTOR = float(os.getenv("RETRAIN_PERF_FACTOR", "1.5"))
 PREDICTION_HORIZONS = [
-    int(h) for h in os.getenv("PREDICTION_HORIZONS", "12,24,48,72,168,720").split(",")
+    int(h) for h in os.getenv("PREDICTION_HORIZONS", "1,12,24,48,72").split(",")
 ]
 
 STATE_BUCKET = "models"
