@@ -205,22 +205,6 @@ services:
     networks:
       - gold-network
 
-  grafana:
-    image: grafana/grafana
-    container_name: grafana
-    depends_on:
-      - postgres
-    ports:
-      - "3000:3000"
-    environment:
-      GF_SECURITY_ADMIN_USER: admin
-      GF_SECURITY_ADMIN_PASSWORD: admin
-    volumes:
-      - ./grafana/provisioning:/etc/grafana/provisioning
-    restart: unless-stopped
-    networks:
-      - gold-network
-
   telegram-bot:
     build:
       context: .
@@ -238,6 +222,30 @@ services:
       POSTGRES_PASSWORD: postgres
       CHECK_INTERVAL: "30"
       PRICE_THRESHOLD: "10.0"
+    restart: unless-stopped
+    networks:
+      - gold-network
+
+  dashboard:
+    build:
+      context: .
+      dockerfile: streamlit/Dockerfile
+    container_name: dashboard
+    depends_on:
+      - postgres
+    ports:
+      - "8501:8501"
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: gold_prediction
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      GARAGE_ENDPOINT: http://garage:3900
+      GARAGE_ACCESS_KEY: ${GARAGE_ACCESS_KEY}
+      GARAGE_SECRET_KEY: ${GARAGE_SECRET_KEY}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
     restart: unless-stopped
     networks:
       - gold-network

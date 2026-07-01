@@ -30,7 +30,7 @@
 ┌──────────────────┐    ┌──────────────▼──────────────┐
 │ MLflow (port 5000)│    │ Person 4 (Angel)            │
 │ - Experiment track│    │ FastAPI → PostgreSQL        │
-│ - Artifact store  │    │ Grafana → Telegram          │
+│ - Artifact store  │    │ Streamlit → Telegram        │
 │ - Model registry  │    │ (baca dari champion/)      │
 └──────────────────┘    └─────────────────────────────┘
          │

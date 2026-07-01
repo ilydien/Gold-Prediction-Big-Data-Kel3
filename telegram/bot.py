@@ -63,14 +63,14 @@ def check_and_alert():
         cur = conn.cursor()
 
         cur.execute(
-            "SELECT id, timestamp, predicted_price, model_version "
+            "SELECT id, timestamp, predicted_price "
             "FROM predictions ORDER BY timestamp DESC LIMIT 1"
         )
         row = cur.fetchone()
         if not row:
             return
 
-        pred_id, ts, predicted_price, model_version = row
+        pred_id, ts, predicted_price = row
 
         if pred_id == _last_prediction_id:
             return
@@ -90,8 +90,7 @@ def check_and_alert():
         msg = (
             f"💰 *Gold Price Alert*\n"
             f"Time: {ts_wib.strftime('%Y-%m-%d %H:%M:%S WIB')}\n"
-            f"Predicted: ${predicted_price:.2f}\n"
-            f"Model: {model_version}"
+            f"Predicted: ${predicted_price:.2f}"
         )
 
         if prev:

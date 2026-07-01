@@ -1,6 +1,6 @@
 # Real-Time Gold Price Prediction and Monitoring System
 
-Big Data Streaming project — monitoring dan prediksi harga emas dunia secara real-time menggunakan Kafka, Spark, Garage, scikit-learn, FastAPI, Grafana, dan Telegram.
+Big Data Streaming project — monitoring dan prediksi harga emas dunia secara real-time menggunakan Kafka, Spark, Garage, scikit-learn, FastAPI, Streamlit, dan Telegram.
 
 ## Team
 
@@ -9,7 +9,7 @@ Big Data Streaming project — monitoring dan prediksi harga emas dunia secara r
 | 1 | Yoeke | Data Ingestion | kafka, yahoo-fetcher |
 | 2 | Dio | Stream Processing | spark-master, spark-worker, processing-job |
 | 3 | Fatih | ML & MLOps | prefect, ml-training |
-| 4 | Angel | Serving & Monitoring | fastapi, postgres, grafana, telegram-bot |
+| 4 | Angel | Serving & Monitoring | fastapi, postgres, streamlit, telegram-bot |
 
 ## Architecture
 
@@ -38,7 +38,7 @@ graph TD
     subgraph "Person 4 - Angel"
         GB4 -->|load at startup| FA[FastAPI]
         FA -->|predictions| PG
-        PG --> G[Grafana Dashboard]
+        PG --> S[Streamlit Dashboard]
         PG --> TB[Telegram Alert Bot]
     end
 ```
@@ -52,7 +52,7 @@ graph TD
 5. **ML Training** (Fatih) membaca features dari Garage (via Tailscale ke Dio), train 2 model (LR, GBR), pilih terbaik, simpan ke Garage.
 6. **FastAPI** (Angel) load model dari Garage saat startup (via Tailscale ke Dio), simpan di RAM.
 7. **FastAPI** menerima features → predict → simpan ke PostgreSQL.
-8. **Grafana** visualisasi dari PostgreSQL.
+8. **Streamlit** visualisasi dari PostgreSQL.
 9. **Telegram Bot** kirim alert jika harga berubah > threshold.
 
 ## Data Source
@@ -126,7 +126,7 @@ Detail: lihat `TAILSCALE-SETUP.md`
 | `docker-compose-person2.yaml` | Dio | spark-master, spark-worker, processing-job, garage, garage-init |
 | `docker-compose.person1+2.yaml` | Dio (simulasi Yoeke) | kafka, yahoo-fetcher, spark-master, spark-worker, processing-job, garage, garage-init, garage-webui |
 | `docker-compose-person3.yaml` | Fatih | prefect, ml-training |
-| `docker-compose-person4.yaml` | Angel | postgres, fastapi, grafana, telegram-bot |
+| `docker-compose-person4.yaml` | Angel | postgres, fastapi, dashboard, telegram-bot |
 | `docker-compose.local.yaml` | Local | all services on one machine |
 
 ## Services & Ports
@@ -140,7 +140,7 @@ Detail: lihat `TAILSCALE-SETUP.md`
 | MLflow UI | `5000` | Person 3 |
 | FastAPI | `8000` | Person 4 |
 | PostgreSQL | `5432` | Person 4 |
-| Grafana | `3000` | Person 4 |
+| Streamlit | `8501` | Person 4 |
 | Spark Master | `7077`, `8080` | Person 2 |
 
 ## Inter-Service Communication (Tailscale)

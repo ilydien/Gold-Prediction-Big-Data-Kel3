@@ -121,12 +121,13 @@ function toWIB(utcStr) {
   try {
     const d = new Date(utcStr + "Z");
     if (isNaN(d.getTime())) return utcStr;
-    const yyyy = d.getUTCFullYear();
-    const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
-    const dd = String(d.getUTCDate()).padStart(2, "0");
-    const hh = String((d.getUTCHours() + 7) % 24).padStart(2, "0");
-    const mi = String(d.getUTCMinutes()).padStart(2, "0");
-    const ss = String(d.getUTCSeconds()).padStart(2, "0");
+    const wib = new Date(d.getTime() + 7 * 3600000);
+    const yyyy = wib.getUTCFullYear();
+    const mm = String(wib.getUTCMonth() + 1).padStart(2, "0");
+    const dd = String(wib.getUTCDate()).padStart(2, "0");
+    const hh = String(wib.getUTCHours()).padStart(2, "0");
+    const mi = String(wib.getUTCMinutes()).padStart(2, "0");
+    const ss = String(wib.getUTCSeconds()).padStart(2, "0");
     return yyyy + "-" + mm + "-" + dd + " " + hh + ":" + mi + ":" + ss;
   } catch (e) { return utcStr; }
 }
@@ -310,49 +311,71 @@ function renderPredictionHistory(preds) {
 }
 
 function renderActualVsPredicted(preds) {
-  // Filter GC=F historical by lookback
-  const lookback = document.getElementById("sel-lookback").value;
-  const msMap = { "15m": 900000, "30m": 1800000, "1h": 3600000, "2h": 7200000, "3h": 10800000 };
-  let gcData = lastGcHistory;
-  if (lookback && lookback !== "all" && msMap[lookback] && lastGcHistory.length > 0) {
-    const lastTs = new Date(lastGcHistory[lastGcHistory.length - 1].x.replace(" ", "T") + "+07:00").getTime();
-    const cutoff = (isNaN(lastTs) ? Date.now() : lastTs) - msMap[lookback];
-    gcData = lastGcHistory.filter(pt => {
-      if (!pt.x) return false;
-      const t = new Date(pt.x.replace(" ", "T") + "+07:00").getTime();
-      return !isNaN(t) && t >= cutoff;
-    });
-  }
-
-  const gcX = [], gcY = [];
-  gcData.forEach(pt => {
-    gcX.push(pt.x || ""); gcY.push(pt.y);
-  });
-
-  // Prediction dots
-  const predX = [], predY = [], tooltips = [];
+  const actualX = [], actualY = [], actualTips = [];
   preds.forEach(p => {
-    predX.push(toWIB(p.timestamp));
-    predY.push(p.predicted_price);
-    let tip = "Predicted: $" + p.predicted_price.toFixed(2);
-    tip += "<br>Horizon: " + p.horizon + "h";
-    if (p.actual_price != null) tip += "<br>Actual: $" + p.actual_price.toFixed(2);
-    if (p.model_version) tip += "<br>Model: " + p.model_version;
-    tooltips.push(tip);
+    if (p.actual_price != null) {
+      actualX.push(toWIB(p.timestamp));
+      actualY.push(p.actual_price);
+      actualTips.push("Actual: $" + p.actual_price.toFixed(2));
+    }
   });
+
+  const allX = [], allY = [], allLabels = [], allTips = [];
+
+  // History: garis prediksi (hanya di titik yang punya actual)
+  preds.forEach(p => {
+    if (p.actual_price != null) {
+      allX.push(toWIB(p.timestamp));
+      allY.push(p.predicted_price);
+      allLabels.push(p.horizon < 24 ? p.horizon + "h" : Math.floor(p.horizon / 24) + "d");
+      let tip = "Predicted: $" + p.predicted_price.toFixed(2) + " (" + p.horizon + "h)";
+      if (p.model_version) tip += "<br>Model: " + p.model_version;
+      allTips.push(tip);
+    }
+  });
+
+  // Forecast: 1 bubble prediksi paling terkini di jam sekarang
+  let fX = null, fY = null, fLabel = "", fTip = "";
+  const latest = preds.length > 0 ? preds.reduce((a, b) => a.timestamp > b.timestamp ? a : b) : null;
+  if (latest) {
+    const targetTime = new Date(Date.now() + latest.horizon * 3600000);
+    const targetWIB = toWIB(targetTime.toISOString().replace("Z", ""));
+    fX = targetWIB;
+    fY = latest.predicted_price;
+    const labelHorizon = latest.horizon < 24 ? latest.horizon + "h" : Math.floor(latest.horizon / 24) + "d";
+    const labelTime = toWIB(latest.timestamp).slice(-8, -3);
+    fLabel = labelHorizon + " → $" + latest.predicted_price.toFixed(0) + " (pk. " + labelTime + ")";
+    fTip = "Predicted at: " + toWIB(latest.timestamp);
+    fTip += "<br>" + latest.horizon + "h ahead → " + targetWIB + " = $" + latest.predicted_price.toFixed(2);
+    if (latest.model_version) fTip += "<br>Model: " + latest.model_version;
+  }
 
   const traces = [];
-    if (gcX.length > 0) {
+  if (actualX.length > 0) {
     traces.push({
-      x: gcX, y: gcY, type: "scatter", mode: "lines",
-      name: "GC=F", line: { color: "#00cc96", width: 2 },
+      x: actualX, y: actualY, type: "scatter", mode: "lines",
+      name: "Actual: $" + actualY[actualY.length - 1].toFixed(2), line: { color: "#00cc96", width: 2 },
+      text: actualTips, hoverinfo: "text",
+      hoverlabel: { bgcolor: "#1a1c23", font: { color: "#fafafa", size: 12 } },
     });
   }
-  if (predX.length > 0) {
+  if (allX.length > 0) {
     traces.push({
-      x: predX, y: predY, type: "scatter", mode: "markers",
-      name: "Prediction", text: tooltips, hoverinfo: "text+x",
-      marker: { size: 5, opacity: 0.7, color: "#ff7f0e", symbol: "circle", line: { width: 1, color: "#fff" } },
+      x: allX, y: allY, type: "scatter", mode: "lines",
+      name: "Predicted: $" + (allY.length > 0 ? allY[allY.length - 1].toFixed(2) : "—") + (latest && latest.model_version ? " (" + latest.model_version + ")" : ""), text: allTips,
+      hoverinfo: "text", hoverlabel: { bgcolor: "#1a1c23", font: { color: "#fafafa", size: 12 } },
+      line: { color: "#ff7f0e", width: 2, dash: "dash" },
+    });
+  }
+  if (fX) {
+    traces.push({
+      x: [fX], y: [fY], type: "scatter", mode: "markers+text",
+      name: "Forecast", showlegend: false,
+      text: [fLabel], textposition: "top center",
+      textfont: { size: 11, color: "#ff7f0e" },
+      hovertext: [fTip], hoverinfo: "text",
+      hoverlabel: { bgcolor: "#1a1c23", font: { color: "#fafafa", size: 12 } },
+      marker: { size: 10, color: "#ff7f0e", symbol: "circle", line: { width: 1, color: "#fff" } },
     });
   }
 

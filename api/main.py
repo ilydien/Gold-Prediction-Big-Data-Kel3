@@ -208,19 +208,27 @@ def _load_parquet_batch(keys: list[str], bucket: str = "processed-data", max_wor
 
 def _rebuild_history() -> pd.DataFrame:
     global _processed_keys
-    log.info("Loading initial history from Garage...")
-    all_keys = sorted(_list_parquet_keys())
-    if not all_keys:
-        log.warning("No parquet files in Garage")
-        return pd.DataFrame()
+    try:
+        log.info("Loading initial history from Garage...")
+        all_keys = sorted(_list_parquet_keys())
+        if not all_keys:
+            log.warning("No parquet files in Garage")
+            return pd.DataFrame()
 
-    all_keys = sorted(all_keys)
-    load_keys = all_keys[-200:]
-    df = _load_parquet_batch(load_keys)
-    _processed_keys = set(all_keys)
-    df = df.drop_duplicates(subset=["timestamp"]).sort_values("timestamp").reset_index(drop=True)
-    log.info(f"Loaded {len(df)} historical rows from Garage ({len(all_keys)} total keys tracked)")
-    return df
+        all_keys = sorted(all_keys)
+        load_keys = all_keys[-200:]
+        df = _load_parquet_batch(load_keys)
+        _processed_keys = set(all_keys)
+        df = df.drop_duplicates(subset=["timestamp"]).sort_values("timestamp").reset_index(drop=True)
+        log.info(f"Loaded {len(df)} historical rows from Garage ({len(all_keys)} total keys tracked)")
+        return df
+    except Exception as e:
+        log.error(f"Failed to rebuild history from Garage: {e}")
+        try:
+            _processed_keys = set(_list_parquet_keys())
+        except Exception:
+            pass
+        return pd.DataFrame()
 
 
 def _check_new_data() -> pd.DataFrame:
@@ -230,8 +238,13 @@ def _check_new_data() -> pd.DataFrame:
         new_keys = sorted(all_keys - _processed_keys)
         if not new_keys:
             return pd.DataFrame()
+        if len(new_keys) > 200:
+            log.warning(f"Too many new keys ({len(new_keys)}), loading latest 200")
+            _processed_keys.update(new_keys[:-200])
+            new_keys = new_keys[-200:]
+        else:
+            _processed_keys.update(new_keys)
         df = _load_parquet_batch(new_keys)
-        _processed_keys.update(new_keys)
         log.info(f"Added {len(df)} new rows from Garage")
         return df
     except Exception as e:
@@ -298,9 +311,14 @@ def _polling_loop():
 
     _history_buffer = _rebuild_history()
     last_refresh = time.time()
+    last_rebuild = time.time()
 
     while True:
         try:
+            if _history_buffer.empty and time.time() - last_rebuild > 30:
+                _history_buffer = _rebuild_history()
+                last_rebuild = time.time()
+
             if time.time() - last_refresh > 60:
                 new_data = _check_new_data()
                 if new_data is not None and not new_data.empty:
